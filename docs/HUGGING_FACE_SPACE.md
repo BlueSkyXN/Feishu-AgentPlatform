@@ -107,10 +107,10 @@ SQLite 配置库首版也按单写实例设计。不要让多个 Space/副本同
 
 ```text
 Repository variable: HF_SPACE_ID=owner/space-name
-Repository secret:   HF_TOKEN=hf_xxx
+Environment secret (huggingface-space): HF_TOKEN=hf_xxx
 ```
 
-将 Token 放入 `huggingface-space` Environment。自动部署只在明确设置 `HF_AUTO_DEPLOY=true` 后启用。同步使用干净 Git 归档，保持 setup mode，通过 HTTPS 推送；Token 不进入 YAML、remote URL、Commit 或日志。
+只在 `huggingface-space` Environment 中保存该 Token，不要再配置同名 Repository secret。自动部署只在明确设置 `HF_AUTO_DEPLOY=true` 后启用。同步使用干净 Git 归档，保持 setup mode，通过 HTTPS 推送；Token 不进入 YAML、remote URL、Commit 或日志。
 
 部署 job 不在 `git push` 后立即成功：它继续等待 Space repo/runtime SHA 一致、`RUNNING`、域名 `READY`，并验证 `/healthz`、`/readyz` 与 `/admin`。映射信息写入 Space 的 `DEPLOYMENT_SOURCE.json` 和 GitHub Actions deployment evidence artifact。
 

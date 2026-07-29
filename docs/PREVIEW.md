@@ -18,9 +18,11 @@ https://blueskyxn-feishu-agentplatform.hf.space/admin
 
 Space 为 private 时，先登录具有访问权限的 Hugging Face 账号。管理台再使用部署时配置的 `ADMIN_TOKEN` 登录；Token 不写入文档、URL 或浏览器截图。
 
-## 无外部凭据可以预览
+以上 URL 只有在最新 `CI/CD` run 已完成 HF runtime 验收后才算可预览。若 Actions 未通过、Space 不是 `RUNNING`，或 `/healthz`、`/readyz`、`/admin` smoke 未通过，应以 Actions 和 Space 的实时状态为准，不把页面清单当作已部署证据。
 
-空数据库以 setup mode 启动，可以检查：
+## 无需飞书和模型凭据可以预览的功能
+
+当 Space 已通过 runtime 与 HTTP smoke 后，空数据库会以 setup mode 启动，可以检查：
 
 - 中文登录页、错误提示和安全 Cookie；
 - 总览中的 App、Agent、Binding、Worker、队列和 Broker 状态；

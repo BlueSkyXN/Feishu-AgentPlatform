@@ -3,6 +3,8 @@ dist/
 .test-dist/
 .offline-dist/
 coverage/
+__pycache__/
+*.py[cod]
 /release/
 .env
 .env.*
