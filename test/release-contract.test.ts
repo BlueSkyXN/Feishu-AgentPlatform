@@ -113,15 +113,22 @@ test('HF deployment preserves setup mode and verifies the exact remote runtime',
   assert.doesNotMatch(workflow, /cp\s+"\$example"/);
   assert.match(workflow, /active YAML manifests are forbidden/);
   assert.match(workflow, /DEPLOYMENT_SOURCE\.json/);
-  assert.match(workflow, /hf spaces info/);
+  assert.match(workflow, /python3 scripts\/hf-space-info\.py/);
+  assert.match(workflow, /Hugging Face SDK readback contract/);
+  assert.doesNotMatch(workflow, /hf spaces info|--json/);
   assert.match(workflow, /runtime_sha/);
-  assert.match(workflow, /runtime\.sha \?\? "pending"/);
+  assert.match(workflow, /hf-space-runtime-state\.mjs/);
+  assert.match(workflow, /runtime-state-latest\.json/);
   assert.match(workflow, /GET \/healthz|healthz\.json/);
   assert.match(workflow, /readyz\.json/);
   assert.match(workflow, /admin\.html/);
   assert.match(workflow, /hf-deployment-/);
   assert.match(workflow, /group: hf-space-\$\{\{ vars\.HF_SPACE_ID \}\}/);
-  assert.match(workflow, /remained PAUSED for two minutes/);
+  assert.match(workflow, /paused_since/);
+  assert.match(workflow, /status: 'pending'/);
+  assert.match(workflow, /status: 'failed'/);
+  assert.match(workflow, /expectedHfRepositorySha/);
+  assert.match(workflow, /pushed-sha\.txt/);
 });
 
 test('HFS source deployment is bound to immutable commits', async () => {

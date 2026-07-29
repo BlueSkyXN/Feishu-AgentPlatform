@@ -43,8 +43,26 @@ jobs:
           test -n "${HF_TOKEN:-}"
           [[ "$HF_SPACE_ID" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
 
-      - name: Install pinned Hugging Face CLI
+      - name: Install pinned Hugging Face SDK
         run: python3 -m pip install --disable-pip-version-check --no-cache-dir 'huggingface_hub==1.5.0'
+
+      - name: Verify Hugging Face SDK readback contract
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/hf-space-info-preflight.json"
+          python3 scripts/hf-space-info.py "$output"
+          node --input-type=module - "$output" "$HF_SPACE_ID" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const info = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (typeof info.id !== 'string' || info.id.toLowerCase() !== process.argv[3].toLowerCase()) {
+            throw new Error(`Unexpected Space id: ${info.id}`);
+          }
+          if (typeof info.sha !== 'string' || !info.sha) throw new Error('Space SHA is missing');
+          if (!Object.hasOwn(info, 'runtime')) throw new Error('Space runtime field is missing');
+          NODE
 
       - name: Export deterministic setup-mode Space repository
         id: export
@@ -94,6 +112,31 @@ jobs:
           test -n "$hf_sha"
           printf 'hf_sha=%s\n' "$hf_sha" >> "$GITHUB_OUTPUT"
 
+      - name: Initialize deployment evidence
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/deployment-evidence"
+          mkdir -p "$evidence_dir"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
+          const evidence = {
+            schemaVersion: 1,
+            status: 'pending',
+            sourceSha: process.env.SOURCE_SHA,
+            expectedHfRepositorySha: process.env.EXPECTED_HF_SHA,
+            hfRepositorySha: null,
+            hfRuntimeSha: null,
+            stage: 'waiting_for_push',
+            domainStage: 'unknown',
+            http: null,
+          };
+          writeFileSync(`${directory}/deployment-evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`);
+          NODE
+
       - name: Push deterministic source to Hugging Face over HTTPS
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -120,6 +163,7 @@ jobs:
           remote_sha="$(GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
             git ls-remote huggingface refs/heads/main | awk '{print $1}')"
           test "$remote_sha" = "$EXPECTED_HF_SHA"
+          printf '%s\n' "$remote_sha" > "$RUNNER_TEMP/deployment-evidence/pushed-sha.txt"
 
       - name: Wait for exact Space runtime and verify public plane
         env:
@@ -132,59 +176,71 @@ jobs:
           evidence_dir="$RUNNER_TEMP/deployment-evidence"
           mkdir -p "$evidence_dir"
           ready=false
+          paused_since=0
+          readback_failures=0
+
+          write_failure_context() {
+            FAILURE_PHASE="$1" FAILURE_REASON="$2" node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
+          const context = {
+            phase: process.env.FAILURE_PHASE,
+            reason: process.env.FAILURE_REASON,
+          };
+          writeFileSync(`${directory}/failure-context.json`, `${JSON.stringify(context, null, 2)}\n`);
+          NODE
+          }
+          write_failure_context runtime_readback runtime_not_ready
 
           for attempt in $(seq 1 180); do
-            info="$(hf spaces info "$HF_SPACE_ID" \
-              --token "$HF_TOKEN" \
-              --expand sha,runtime,private,sdk,subdomain \
-              --json)"
-            printf '%s\n' "$info" > "$evidence_dir/space-info-latest.json"
-            status="$(printf '%s' "$info" | node --input-type=module -e '
-              const chunks=[];
-              for await (const chunk of process.stdin) chunks.push(chunk);
-              const info=JSON.parse(Buffer.concat(chunks).toString());
-              const runtime=info.runtime?.raw ?? info.runtime ?? {};
-              const domains=Array.isArray(runtime.domains) ? runtime.domains : [];
-              const domainStage=domains[0]?.stage ?? "unknown";
-              const blocked=Boolean(runtime.abuse || runtime.errorMessage);
-              process.stdout.write([
-                info.sha ?? "pending",
-                runtime.sha ?? "pending",
-                runtime.stage ?? "unknown",
-                domainStage,
-                info.subdomain ?? "pending",
-                blocked ? "1" : "0",
-              ].join("\t"));
-            ')"
-            IFS=$'\t' read -r repo_sha runtime_sha stage domain_stage subdomain blocked <<< "$status"
-            printf 'HF attempt=%s repo=%s runtime=%s stage=%s domain=%s\n' \
-              "$attempt" "${repo_sha:-pending}" "${runtime_sha:-pending}" "$stage" "$domain_stage"
+            info_file="$evidence_dir/space-info-latest.json"
+            state_file="$evidence_dir/runtime-state-latest.json"
+            if ! python3 scripts/hf-space-info.py "$info_file"; then
+              readback_failures=$((readback_failures + 1))
+              paused_since=0
+              write_failure_context runtime_readback sdk_readback_failed
+              printf 'attempt=%s consecutive_failures=%s\n' \
+                "$attempt" "$readback_failures" > "$evidence_dir/readback-error-latest.txt"
+              if [[ "$readback_failures" -ge 3 ]]; then
+                echo 'Hugging Face SDK readback failed three consecutive times.' >&2
+                exit 1
+              fi
+              sleep 10
+              continue
+            fi
+            readback_failures=0
+            write_failure_context runtime_evaluation runtime_evaluation_failed
+            status="$(node scripts/hf-space-runtime-state.mjs \
+              "$info_file" "$EXPECTED_HF_SHA" "$paused_since" "$state_file")"
+            IFS=$'\t' read -r disposition reason repo_sha runtime_sha stage domain_stage subdomain paused_since paused_for_ms <<< "$status"
+            write_failure_context runtime_poll "$reason"
+            printf 'HF attempt=%s repo=%s runtime=%s stage=%s domain=%s decision=%s reason=%s paused_ms=%s\n' \
+              "$attempt" "$repo_sha" "$runtime_sha" "$stage" "$domain_stage" \
+              "$disposition" "$reason" "$paused_for_ms"
 
-            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && "$runtime_sha" = "$EXPECTED_HF_SHA" && \
-                  "$stage" = 'RUNNING' && "$domain_stage" = 'READY' && -n "$subdomain" ]]; then
+            if [[ "$disposition" = 'ready' ]]; then
               ready=true
               break
             fi
-            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && \
-                  ( "$blocked" = 1 || "$stage" =~ ^(BUILD_ERROR|RUNTIME_ERROR|CONFIG_ERROR)$ ) ]]; then
-              echo "Hugging Face Space entered terminal stage: $stage" >&2
-              exit 1
-            fi
-            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && "$stage" = 'PAUSED' && "$attempt" -ge 12 ]]; then
-              echo 'Hugging Face Space remained PAUSED for two minutes.' >&2
+            if [[ "$disposition" = 'terminal' ]]; then
+              echo "Hugging Face Space entered terminal state: stage=$stage reason=$reason" >&2
               exit 1
             fi
             sleep 10
           done
           test "$ready" = true
 
+          write_failure_context http_smoke http_smoke_failed
           base="https://${subdomain}.hf.space"
           health_status="$(curl --silent --show-error --location --output "$evidence_dir/healthz.json" \
-            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/healthz")"
+            --proto '=https' --proto-redir '=https' --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${HF_TOKEN}" "$base/healthz")"
           ready_status="$(curl --silent --show-error --location --output "$evidence_dir/readyz.json" \
-            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/readyz")"
+            --proto '=https' --proto-redir '=https' --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${HF_TOKEN}" "$base/readyz")"
           admin_status="$(curl --silent --show-error --location --output "$evidence_dir/admin.html" \
-            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/admin")"
+            --proto '=https' --proto-redir '=https' --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${HF_TOKEN}" "$base/admin")"
           test "$health_status" = 200
           test "$ready_status" = 200
           test "$admin_status" = 200
@@ -204,14 +260,16 @@ jobs:
             node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
           const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
-          const info = JSON.parse(readFileSync(`${directory}/space-info-latest.json`, 'utf8'));
+          const state = JSON.parse(readFileSync(`${directory}/runtime-state-latest.json`, 'utf8'));
           const evidence = {
             schemaVersion: 1,
+            status: 'verified',
             sourceSha: process.env.SOURCE_SHA,
+            expectedHfRepositorySha: process.env.EXPECTED_HF_SHA,
             hfRepositorySha: process.env.EXPECTED_HF_SHA,
-            hfRuntimeSha: info.runtime?.raw?.sha ?? info.runtime?.sha,
-            stage: info.runtime?.raw?.stage ?? info.runtime?.stage,
-            domainStage: info.runtime?.raw?.domains?.[0]?.stage ?? 'unknown',
+            hfRuntimeSha: state.runtimeSha,
+            stage: state.stage,
+            domainStage: state.domainStage,
             http: {
               healthz: Number(process.env.HEALTH_STATUS),
               readyz: Number(process.env.READY_STATUS),
@@ -219,6 +277,56 @@ jobs:
             },
           };
           writeFileSync(`${directory}/deployment-evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`);
+          NODE
+
+      - name: Finalize failed deployment evidence
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/deployment-evidence"
+          mkdir -p "$evidence_dir"
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
+          const evidencePath = `${directory}/deployment-evidence.json`;
+          const statePath = `${directory}/runtime-state-latest.json`;
+          const contextPath = `${directory}/failure-context.json`;
+          const pushedPath = `${directory}/pushed-sha.txt`;
+          const readJsonObject = (path) => {
+            if (!existsSync(path)) return {};
+            try {
+              const value = JSON.parse(readFileSync(path, 'utf8'));
+              return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+            } catch {
+              return {};
+            }
+          };
+          const previous = readJsonObject(evidencePath);
+          const state = readJsonObject(statePath);
+          const context = readJsonObject(contextPath);
+          const pushedSha = existsSync(pushedPath)
+            ? readFileSync(pushedPath, 'utf8').trim()
+            : '';
+          const observedRepositorySha = pushedSha ||
+            (state.repoSha && state.repoSha !== 'pending' ? state.repoSha : null);
+          const evidence = {
+            ...previous,
+            schemaVersion: 1,
+            status: 'failed',
+            sourceSha: process.env.SOURCE_SHA,
+            expectedHfRepositorySha: process.env.EXPECTED_HF_SHA ||
+              previous.expectedHfRepositorySha || null,
+            hfRepositorySha: observedRepositorySha,
+            hfRuntimeSha: state.runtimeSha === 'pending' ? null : state.runtimeSha ?? null,
+            stage: state.stage ?? previous.stage ?? 'workflow_failed',
+            domainStage: state.domainStage ?? previous.domainStage ?? 'unknown',
+            failurePhase: context.phase ?? (existsSync(pushedPath) ? 'post_push' : 'pre_push'),
+            failureReason: context.reason ?? state.reason ?? 'workflow_step_failed',
+          };
+          writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
           NODE
 
       - name: Upload deployment evidence

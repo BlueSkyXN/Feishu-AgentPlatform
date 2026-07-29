@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   mkdtemp,
+  mkdir,
   readFile,
   readdir,
   rm,
@@ -182,6 +183,166 @@ test('workflows pin Actions and gate release and HF deployment on resolved commi
   assert.doesNotMatch(release, /--clobber/u);
 });
 
+test('HF SDK adapter emits stable JSON without serializing credentials', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hf-space-info-test-'));
+  const packageDirectory = join(temporary, 'huggingface_hub');
+  const output = join(temporary, 'space-info.json');
+  await mkdir(packageDirectory);
+  await writeFile(
+    join(packageDirectory, '__init__.py'),
+    [
+      'class Runtime:',
+      "    stage = 'PAUSED'",
+      "    raw = {'stage': 'PAUSED', 'sha': 'runtime-sha', 'domains': [{'stage': 'READY'}]}",
+      '',
+      'class Info:',
+      "    id = 'owner/space'",
+      "    sha = 'repository-sha'",
+      '    private = True',
+      "    sdk = 'docker'",
+      "    subdomain = 'owner-space'",
+      '    runtime = Runtime()',
+      '',
+      'class HfApi:',
+      '    def __init__(self, token):',
+      "        assert token == 'test-secret-token'",
+      '    def space_info(self, repo_id, timeout, expand):',
+      "        assert repo_id == 'owner/space'",
+      '        assert timeout == 30',
+      "        assert expand == ['sha', 'runtime', 'private', 'sdk', 'subdomain']",
+      '        return Info()',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  try {
+    await commandOutput(
+      'python3',
+      ['scripts/hf-space-info.py', output],
+      root,
+      {
+        PYTHONPATH: temporary,
+        HF_SPACE_ID: 'owner/space',
+        HF_TOKEN: 'test-secret-token',
+      },
+    );
+    const raw = await readFile(output, 'utf8');
+    const document = JSON.parse(raw) as Record<string, unknown>;
+    assert.equal(document.id, 'owner/space');
+    assert.equal(document.sha, 'repository-sha');
+    assert.deepEqual(document.runtime, {
+      stage: 'PAUSED',
+      raw: {
+        stage: 'PAUSED',
+        sha: 'runtime-sha',
+        domains: [{ stage: 'READY' }],
+      },
+    });
+    assert.doesNotMatch(raw, /test-secret-token/u);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test('HF runtime evaluator fails closed and measures only continuous PAUSED time', async () => {
+  const url = pathToFileURL(join(root, 'scripts', 'hf-space-runtime-state.mjs')).href;
+  const { evaluateSpaceRuntime } = await import(url) as {
+    evaluateSpaceRuntime(
+      info: Record<string, unknown>,
+      expectedSha: string,
+      pausedSince?: number,
+      now?: number,
+      pausedGraceMs?: number,
+    ): {
+      disposition: string;
+      reason: string;
+      pausedSince: number;
+      pausedForMs: number;
+      runtimeSha: string;
+    };
+  };
+  const expectedSha = 'a'.repeat(40);
+  const runtime = (
+    stage: string,
+    options: { sha?: string; domain?: string; abuse?: boolean; errorMessage?: string } = {},
+  ): Record<string, unknown> => ({
+    id: 'owner/space',
+    sha: expectedSha,
+    subdomain: 'owner-space',
+    runtime: {
+      stage,
+      raw: {
+        stage,
+        sha: options.sha,
+        domains: [{ stage: options.domain ?? 'READY' }],
+        abuse: options.abuse,
+        errorMessage: options.errorMessage,
+      },
+    },
+  });
+
+  assert.deepEqual(
+    evaluateSpaceRuntime(runtime('RUNNING', { sha: expectedSha }), expectedSha),
+    {
+      disposition: 'ready',
+      reason: 'ready',
+      repoSha: expectedSha,
+      runtimeSha: expectedSha,
+      stage: 'RUNNING',
+      domainStage: 'READY',
+      subdomain: 'owner-space',
+      subdomainValid: true,
+      blocked: false,
+      pausedSince: 0,
+      pausedForMs: 0,
+    },
+  );
+  assert.equal(
+    evaluateSpaceRuntime(runtime('RUNNING'), expectedSha).runtimeSha,
+    'pending',
+  );
+  assert.equal(
+    evaluateSpaceRuntime(runtime('RUNNING', { sha: expectedSha, abuse: true }), expectedSha)
+      .reason,
+    'platform_abuse',
+  );
+  assert.equal(
+    evaluateSpaceRuntime(
+      runtime('RUNNING', { sha: expectedSha, errorMessage: 'blocked' }),
+      expectedSha,
+    ).reason,
+    'platform_error',
+  );
+  assert.equal(
+    evaluateSpaceRuntime(runtime('BUILD_ERROR'), expectedSha).reason,
+    'runtime_error',
+  );
+  assert.equal(
+    evaluateSpaceRuntime(runtime('FUTURE_ERROR'), expectedSha).reason,
+    'runtime_error',
+  );
+  const invalidSubdomain = runtime('RUNNING', { sha: expectedSha });
+  invalidSubdomain.subdomain = '../credential-host';
+  assert.equal(
+    evaluateSpaceRuntime(invalidSubdomain, expectedSha).reason,
+    'invalid_subdomain',
+  );
+
+  const firstPause = evaluateSpaceRuntime(runtime('PAUSED'), expectedSha, 0, 1_000, 120_000);
+  assert.equal(firstPause.disposition, 'wait');
+  assert.equal(firstPause.pausedSince, 1_000);
+  const resetPause = evaluateSpaceRuntime(runtime('BUILDING'), expectedSha, 1_000, 61_000, 120_000);
+  assert.equal(resetPause.pausedSince, 0);
+  const secondPause = evaluateSpaceRuntime(runtime('PAUSED'), expectedSha, 1_000, 121_000, 120_000);
+  assert.equal(secondPause.disposition, 'terminal');
+  assert.equal(secondPause.reason, 'paused_timeout');
+
+  const stale = runtime('RUNTIME_ERROR');
+  stale.sha = 'b'.repeat(40);
+  assert.equal(evaluateSpaceRuntime(stale, expectedSha).disposition, 'wait');
+});
+
 test('release ZIP bytes are produced by the repository-owned deterministic writer', async () => {
   const source = await readFile(join(root, 'scripts', 'package-release.mjs'), 'utf8');
   assert.match(source, /writeDeterministicZip/u);
@@ -236,12 +397,14 @@ async function commandOutput(
   command: string,
   args: string[],
   cwd: string,
+  environment: NodeJS.ProcessEnv = {},
 ): Promise<string> {
   return await new Promise<string>((resolvePromise, reject) => {
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     const child = spawn(command, args, {
       cwd,
+      env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
     });

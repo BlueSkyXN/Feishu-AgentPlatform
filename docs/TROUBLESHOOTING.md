@@ -137,4 +137,4 @@ appKey + agentId + tenantKey + chatId + topicKey
 
 ## HF Space 被平台暂停或 abuse-handler 拦截
 
-先使用官方 `hf spaces info <owner/space> --expand sha,runtime,subdomain --json` 回读 `stage`、`errorMessage` 和 `abuse`。`PAUSED`、`Flagged as abusive` 属于平台状态，不等同于 Docker build error，也不能通过反复创建新 Space 规避。保留 GitHub source SHA、HF repository SHA、workflow run 与用途说明，按 Hugging Face 支持/申诉流程处理；解除前部署 job 应失败，不能把 Git push 成功写成可预览。
+先使用仓库固定的 `huggingface_hub==1.5.0` 和 `scripts/hf-space-info.py` 回读结构化 Space 信息；该版本自带的 `hf spaces info` 不支持 `--json`，不要照搬其他 CLI 版本的参数。检查输出中的 `stage`、`errorMessage` 和 `abuse`。`PAUSED`、`Flagged as abusive` 属于平台状态，不等同于 Docker build error，也不能通过反复创建新 Space 规避。保留 GitHub source SHA、HF repository SHA、workflow run 与用途说明，按 Hugging Face 支持/申诉流程处理；解除前部署 job 应失败，不能把 Git push 成功写成可预览。
