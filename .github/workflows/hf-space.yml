@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hf-space-${{ vars.HF_SPACE_ID }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy and verify runtime
@@ -162,8 +166,12 @@ jobs:
               break
             fi
             if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && \
-                  ( "$blocked" = 1 || "$stage" =~ ^(BUILD_ERROR|RUNTIME_ERROR|CONFIG_ERROR|PAUSED)$ ) ]]; then
+                  ( "$blocked" = 1 || "$stage" =~ ^(BUILD_ERROR|RUNTIME_ERROR|CONFIG_ERROR)$ ) ]]; then
               echo "Hugging Face Space entered terminal stage: $stage" >&2
+              exit 1
+            fi
+            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && "$stage" = 'PAUSED' && "$attempt" -ge 12 ]]; then
+              echo 'Hugging Face Space remained PAUSED for two minutes.' >&2
               exit 1
             fi
             sleep 10

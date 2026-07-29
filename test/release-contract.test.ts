@@ -120,6 +120,8 @@ test('HF deployment preserves setup mode and verifies the exact remote runtime',
   assert.match(workflow, /readyz\.json/);
   assert.match(workflow, /admin\.html/);
   assert.match(workflow, /hf-deployment-/);
+  assert.match(workflow, /group: hf-space-\$\{\{ vars\.HF_SPACE_ID \}\}/);
+  assert.match(workflow, /remained PAUSED for two minutes/);
 });
 
 test('HFS source deployment is bound to immutable commits', async () => {
