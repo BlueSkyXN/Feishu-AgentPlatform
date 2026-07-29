@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 
 import {
   decryptJson,
+  deriveSecretKey,
   encryptJson,
   type EncryptedEnvelope,
 } from '../core/crypto-store.js';
@@ -27,6 +28,8 @@ interface StoredCredential {
 }
 
 export class CredentialVault {
+  private readonly fingerprintKey: Buffer;
+
   constructor(
     private readonly database: PlatformDatabase,
     private readonly masterSecret: string,
@@ -34,6 +37,7 @@ export class CredentialVault {
     if (masterSecret.length < 16) {
       throw new Error('Credential vault master secret must contain at least 16 characters.');
     }
+    this.fingerprintKey = deriveSecretKey(masterSecret, 'credential-fingerprint');
   }
 
   setCredential(input: {
@@ -136,7 +140,7 @@ export class CredentialVault {
   }
 
   private fingerprint(value: string): string {
-    return createHmac('sha256', this.masterSecret)
+    return createHmac('sha256', this.fingerprintKey)
       .update(value, 'utf8')
       .digest('hex')
       .slice(0, 16);

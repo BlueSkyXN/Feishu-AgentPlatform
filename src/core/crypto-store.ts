@@ -1,8 +1,8 @@
 import {
   createCipheriv,
   createDecipheriv,
-  createHash,
   randomBytes,
+  scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
 
@@ -15,7 +15,7 @@ export interface EncryptedEnvelope {
 }
 
 export function encryptJson(value: unknown, secret: string): EncryptedEnvelope {
-  const key = deriveKey(secret);
+  const key = deriveSecretKey(secret, 'encrypted-json');
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
   const plaintext = Buffer.from(JSON.stringify(value), 'utf8');
@@ -38,7 +38,7 @@ export function decryptJson<T>(
   }
   const decipher = createDecipheriv(
     'aes-256-gcm',
-    deriveKey(secret),
+    deriveSecretKey(secret, 'encrypted-json'),
     Buffer.from(envelope.iv, 'base64url'),
   );
   decipher.setAuthTag(Buffer.from(envelope.tag, 'base64url'));
@@ -56,9 +56,12 @@ export function secureEqual(left: string, right: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-function deriveKey(secret: string): Buffer {
+export function deriveSecretKey(secret: string, purpose: string): Buffer {
   if (secret.length < 16) {
     throw new Error('Encryption secret must contain at least 16 characters.');
   }
-  return createHash('sha256').update(secret, 'utf8').digest();
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/u.test(purpose)) {
+    throw new Error('Secret key purpose must be a safe identifier.');
+  }
+  return scryptSync(secret, `feishu-agent-platform:${purpose}:v1`, 32);
 }

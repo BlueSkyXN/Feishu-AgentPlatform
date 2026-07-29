@@ -118,12 +118,26 @@ function normalizeFragment(value) {
 }
 
 function githubSlug(value) {
-  return value
+  return stripHtmlTags(value)
     .trim()
     .toLowerCase()
-    .replace(/<[^>]+>/gu, '')
     .replace(/[\u2000-\u206f\u2e00-\u2e7f'!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/gu, '')
     .replace(/\s+/gu, '-');
+}
+
+function stripHtmlTags(value) {
+  let output = '';
+  let insideTag = false;
+  for (const character of value) {
+    if (character === '<') {
+      insideTag = true;
+    } else if (character === '>') {
+      insideTag = false;
+    } else if (!insideTag) {
+      output += character;
+    }
+  }
+  return output;
 }
 
 function display(file) {

@@ -9,6 +9,7 @@ import {
 } from '../core/atomic-file.js';
 import {
   decryptJson,
+  deriveSecretKey,
   encryptJson,
   secureEqual,
   type EncryptedEnvelope,
@@ -61,11 +62,15 @@ export interface OAuthStatus {
 }
 
 export class OAuthStateStore {
+  private readonly signingKey: Buffer;
+
   constructor(
     private readonly root: string,
-    private readonly secret: string,
+    secret: string,
     private readonly ttlSeconds: number,
-  ) {}
+  ) {
+    this.signingKey = deriveSecretKey(secret, 'oauth-state-signing');
+  }
 
   async issue(
     appKey: string,
@@ -178,7 +183,7 @@ export class OAuthStateStore {
   }
 
   private sign(encoded: string): string {
-    return createHmac('sha256', this.secret)
+    return createHmac('sha256', this.signingKey)
       .update(encoded)
       .digest('base64url');
   }

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { decryptJson, encryptJson, secureEqual } from '../src/core/crypto-store.js';
+import {
+  decryptJson,
+  deriveSecretKey,
+  encryptJson,
+  secureEqual,
+} from '../src/core/crypto-store.js';
 
 test('encryptJson round-trips structured data without plaintext leakage', () => {
   const value = { token: 'sensitive-token', nested: [1, true, null] };
@@ -21,6 +26,15 @@ test('decryptJson rejects the wrong encryption key', () => {
 
 test('encryption rejects undersized secrets', () => {
   assert.throws(() => encryptJson({}, 'too-short'), /at least 16/);
+});
+
+test('secret key derivation is deterministic and domain separated', () => {
+  const secret = '0123456789abcdef0123456789abcdef';
+  const encryption = deriveSecretKey(secret, 'encrypted-json');
+  assert.equal(encryption.length, 32);
+  assert.deepEqual(encryption, deriveSecretKey(secret, 'encrypted-json'));
+  assert.notDeepEqual(encryption, deriveSecretKey(secret, 'oauth-state-signing'));
+  assert.throws(() => deriveSecretKey(secret, '../unsafe'), /safe identifier/);
 });
 
 test('secureEqual compares equal-length strings safely', () => {
