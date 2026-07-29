@@ -114,7 +114,7 @@ Environment secret (huggingface-space): HF_TOKEN=hf_xxx
 
 部署 job 不在 `git push` 后立即成功：它继续等待 Space repo/runtime SHA 一致、`RUNNING`、域名 `READY`，并验证 `/healthz`、`/readyz` 与 `/admin`。映射信息写入 Space 的 `DEPLOYMENT_SOURCE.json` 和 GitHub Actions deployment evidence artifact。
 
-## HFS v2.1 登记
+## HFS v2 登记
 
 根目录 `hfs-dev.toml` 将本项目登记为：
 

@@ -133,6 +133,7 @@ test('HF deployment preserves setup mode and verifies the exact remote runtime',
 
 test('HFS source deployment is bound to immutable commits', async () => {
   const manifest = await source('hfs-dev.toml');
+  assert.match(manifest, /^standard = "2\.0"$/mu);
   assert.match(manifest, /version_source = "commit"/);
   assert.doesNotMatch(manifest, /uncommitted preview/);
 });
