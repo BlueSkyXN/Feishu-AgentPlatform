@@ -1,0 +1,33 @@
+name: Feature request
+description: 提议新的通道、工具、运行时或运维能力
+title: '[Feature] '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: 使用场景
+      description: 描述业务目标，而不仅是实现方式。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: 是否改变权限或执行边界
+      options:
+        - 否
+        - 是，涉及飞书权限
+        - 是，涉及代码执行或工作区
+        - 是，涉及凭据、模型或公网 API
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案与取舍

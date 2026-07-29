@@ -1,0 +1,27 @@
+id: secondary-office
+enabled: false
+app: secondary
+agent: office
+
+route:
+  default: true
+  priority: 0
+  commandPrefixes: []
+  chatAllowlist: []
+  userAllowlist: []
+  threadAllowlist: []
+
+conversation:
+  scope: thread
+  maxPendingTurns: 8
+  idleTtlSeconds: 1800
+  turnTimeoutSeconds: 300
+  toolTimeoutSeconds: 60
+  queuedTurnTtlSeconds: 300
+  maxResidentSessions: 64
+  maxConcurrentTurns: 4
+  recentHistory:
+    enabled: true
+    maxMessages: 30
+    maxCharacters: 40000
+    currentThreadOnly: true

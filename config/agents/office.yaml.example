@@ -1,0 +1,93 @@
+id: office
+enabled: true
+
+systemPromptFile: prompts/office-assistant.md
+provider: host-broker
+model: claude-sonnet-4-6
+modelApi: anthropic-messages
+upstreamPath: /anthropic
+modelOptions:
+  reasoning: true
+  input: [text, image]
+  contextWindow: 200000
+  maxTokens: 32768
+thinkingLevel: medium
+
+runtime:
+  isolation: process
+  workerShutdownGraceSeconds: 10
+
+workspace:
+  mode: read-only
+  maxReadBytes: 2097152
+  maxWriteBytes: 2097152
+  maxTotalBytes: 268435456
+  maxFiles: 10000
+
+tools:
+  defaultIdentity: app
+  allowCrossChatRead: false
+  feishu:
+    - user.profile
+    - chat.info
+    - message.history
+    - doc.read
+    - base.records.list
+    - base.records.search
+    - calendar.events.list
+    - task.list
+    - approval.instance.get
+    - larkcli.run
+    - larkcli.skill.read
+  workspace:
+    - workspace.list
+    - workspace.read
+    - workspace.search
+  openApiReadAllowlist: []
+
+skillPaths: []
+
+larkCli:
+  enabled: true
+  executable: lark-cli
+  expectedVersion: 1.0.79
+  timeoutMs: 60000
+  operations:
+    - id: calendar-agenda
+      command: [calendar, +agenda]
+      effect: read
+      approval: never
+      allowedFlags:
+        --calendar-id: { type: string, maxBytes: 256 }
+        --start: { type: string, maxBytes: 64 }
+        --end: { type: string, maxBytes: 64 }
+      requiredFlags: []
+    - id: current-chat-messages
+      command: [im, +chat-messages-list]
+      effect: read
+      approval: never
+      allowedFlags:
+        --chat-id: { type: string, required: true, maxBytes: 256 }
+        --page-size: { type: integer, minimum: 1, maximum: 50 }
+        --page-token: { type: string, maxBytes: 1024 }
+        --start: { type: string, maxBytes: 64 }
+        --end: { type: string, maxBytes: 64 }
+        --order: { type: string, choices: [asc, desc] }
+        --no-reactions: { type: boolean }
+      requiredFlags: [--chat-id]
+    - id: create-document
+      command: [docs, +create]
+      effect: write
+      approval: requester
+      allowedFlags:
+        --title: { type: string, required: true, maxBytes: 800 }
+        --content: { type: content-file, required: true, maxBytes: 2000000 }
+        --doc-format: { type: string, choices: [xml, markdown] }
+        --parent-token: { type: string, maxBytes: 256 }
+        --parent-position: { type: string, maxBytes: 256 }
+      requiredFlags: [--title, --content]
+  skills:
+    - lark-shared
+    - lark-im
+    - lark-doc
+    - lark-calendar

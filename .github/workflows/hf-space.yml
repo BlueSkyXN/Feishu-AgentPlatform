@@ -1,0 +1,223 @@
+name: Deploy verified source to Hugging Face Space
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Immutable GitHub commit SHA that passed the quality gate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy and verify runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: huggingface-space
+    steps:
+      - name: Check out exact deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact deployment source and settings
+        env:
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse 'HEAD^{commit}')"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test -n "${HF_SPACE_ID:-}"
+          test -n "${HF_TOKEN:-}"
+          [[ "$HF_SPACE_ID" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+
+      - name: Install pinned Hugging Face CLI
+        run: python3 -m pip install --disable-pip-version-check --no-cache-dir 'huggingface_hub==1.5.0'
+
+      - name: Export deterministic setup-mode Space repository
+        id: export
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          export_dir="$RUNNER_TEMP/hf-export"
+          source_time="$(git show -s --format=%cI "$SOURCE_SHA")"
+          mkdir -p "$export_dir"
+          git archive --format=tar "$SOURCE_SHA" | tar -xf - -C "$export_dir"
+
+          test ! -e "$export_dir/.env"
+          test ! -d "$export_dir/.git"
+          test ! -d "$export_dir/local"
+          test ! -d "$export_dir/data"
+          if find "$export_dir/config" -type f \( -name '*.yaml' -o -name '*.yml' \) \
+            ! -name '*.yaml.example' ! -name '*.yml.example' -print -quit | grep -q .; then
+            echo 'The default Space export must remain in setup mode; active YAML manifests are forbidden.' >&2
+            exit 1
+          fi
+
+          SOURCE_REPOSITORY="$GITHUB_REPOSITORY" SOURCE_TIME="$source_time" \
+            node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const document = {
+            schemaVersion: 1,
+            sourceRepository: process.env.SOURCE_REPOSITORY,
+            sourceSha: process.env.SOURCE_SHA,
+            sourceCommitTime: process.env.SOURCE_TIME,
+          };
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/hf-export/DEPLOYMENT_SOURCE.json`,
+            `${JSON.stringify(document, null, 2)}\n`,
+            { mode: 0o644 },
+          );
+          NODE
+
+          cd "$export_dir"
+          git init -b main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          GIT_AUTHOR_DATE="$source_time" GIT_COMMITTER_DATE="$source_time" \
+            git commit -m "Deploy ${GITHUB_REPOSITORY}@${SOURCE_SHA}"
+          hf_sha="$(git rev-parse 'HEAD^{commit}')"
+          test -n "$hf_sha"
+          printf 'hf_sha=%s\n' "$hf_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Push deterministic source to Hugging Face over HTTPS
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+        run: |
+          set -euo pipefail
+          export_dir="$RUNNER_TEMP/hf-export"
+          askpass="$RUNNER_TEMP/hf-askpass.sh"
+          cat > "$askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'hf_token' ;;
+            *Password*) printf '%s\n' "$HF_TOKEN" ;;
+            *) printf '%s\n' '' ;;
+          esac
+          ASKPASS
+          chmod 0700 "$askpass"
+
+          cd "$export_dir"
+          git remote add huggingface "https://huggingface.co/spaces/${HF_SPACE_ID}"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
+            git push --force huggingface HEAD:main
+          remote_sha="$(GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
+            git ls-remote huggingface refs/heads/main | awk '{print $1}')"
+          test "$remote_sha" = "$EXPECTED_HF_SHA"
+
+      - name: Wait for exact Space runtime and verify public plane
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/deployment-evidence"
+          mkdir -p "$evidence_dir"
+          ready=false
+
+          for attempt in $(seq 1 180); do
+            info="$(hf spaces info "$HF_SPACE_ID" \
+              --token "$HF_TOKEN" \
+              --expand sha,runtime,private,sdk,subdomain \
+              --json)"
+            printf '%s\n' "$info" > "$evidence_dir/space-info-latest.json"
+            status="$(printf '%s' "$info" | node --input-type=module -e '
+              const chunks=[];
+              for await (const chunk of process.stdin) chunks.push(chunk);
+              const info=JSON.parse(Buffer.concat(chunks).toString());
+              const runtime=info.runtime?.raw ?? info.runtime ?? {};
+              const domains=Array.isArray(runtime.domains) ? runtime.domains : [];
+              const domainStage=domains[0]?.stage ?? "unknown";
+              const blocked=Boolean(runtime.abuse || runtime.errorMessage);
+              process.stdout.write([
+                info.sha ?? "pending",
+                runtime.sha ?? "pending",
+                runtime.stage ?? "unknown",
+                domainStage,
+                info.subdomain ?? "pending",
+                blocked ? "1" : "0",
+              ].join("\t"));
+            ')"
+            IFS=$'\t' read -r repo_sha runtime_sha stage domain_stage subdomain blocked <<< "$status"
+            printf 'HF attempt=%s repo=%s runtime=%s stage=%s domain=%s\n' \
+              "$attempt" "${repo_sha:-pending}" "${runtime_sha:-pending}" "$stage" "$domain_stage"
+
+            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && "$runtime_sha" = "$EXPECTED_HF_SHA" && \
+                  "$stage" = 'RUNNING' && "$domain_stage" = 'READY' && -n "$subdomain" ]]; then
+              ready=true
+              break
+            fi
+            if [[ "$repo_sha" = "$EXPECTED_HF_SHA" && \
+                  ( "$blocked" = 1 || "$stage" =~ ^(BUILD_ERROR|RUNTIME_ERROR|CONFIG_ERROR|PAUSED)$ ) ]]; then
+              echo "Hugging Face Space entered terminal stage: $stage" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$ready" = true
+
+          base="https://${subdomain}.hf.space"
+          health_status="$(curl --silent --show-error --location --output "$evidence_dir/healthz.json" \
+            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/healthz")"
+          ready_status="$(curl --silent --show-error --location --output "$evidence_dir/readyz.json" \
+            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/readyz")"
+          admin_status="$(curl --silent --show-error --location --output "$evidence_dir/admin.html" \
+            --write-out '%{http_code}' --header "Authorization: Bearer ${HF_TOKEN}" "$base/admin")"
+          test "$health_status" = 200
+          test "$ready_status" = 200
+          test "$admin_status" = 200
+          node --input-type=module - "$evidence_dir/healthz.json" "$evidence_dir/readyz.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const health = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const readiness = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+          if (health.status !== 'ok') throw new Error(`Unexpected health status: ${health.status}`);
+          if (!['setup_required', 'ready'].includes(readiness.status)) {
+            throw new Error(`Unexpected readiness status: ${readiness.status}`);
+          }
+          NODE
+          grep -Eq 'Feishu Agent Platform|飞书' "$evidence_dir/admin.html"
+
+          SOURCE_SHA="$SOURCE_SHA" EXPECTED_HF_SHA="$EXPECTED_HF_SHA" \
+            HEALTH_STATUS="$health_status" READY_STATUS="$ready_status" ADMIN_STATUS="$admin_status" \
+            node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
+          const info = JSON.parse(readFileSync(`${directory}/space-info-latest.json`, 'utf8'));
+          const evidence = {
+            schemaVersion: 1,
+            sourceSha: process.env.SOURCE_SHA,
+            hfRepositorySha: process.env.EXPECTED_HF_SHA,
+            hfRuntimeSha: info.runtime?.raw?.sha ?? info.runtime?.sha,
+            stage: info.runtime?.raw?.stage ?? info.runtime?.stage,
+            domainStage: info.runtime?.raw?.domains?.[0]?.stage ?? 'unknown',
+            http: {
+              healthz: Number(process.env.HEALTH_STATUS),
+              readyz: Number(process.env.READY_STATUS),
+              admin: Number(process.env.ADMIN_STATUS),
+            },
+          };
+          writeFileSync(`${directory}/deployment-evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`);
+          NODE
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hf-deployment-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/deployment-evidence/
+          if-no-files-found: warn
+          retention-days: 30

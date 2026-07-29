@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and verify exact release commit
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          TAG_SHA="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+          HEAD_SHA="$(git rev-parse 'HEAD^{commit}')"
+          test "$HEAD_SHA" = "$TAG_SHA"
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            test "$HEAD_SHA" = "$EVENT_SHA"
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          printf 'release_tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          printf 'source_sha=%s\n' "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Exact-head quality gate
+    needs: resolve
+    uses: ./.github/workflows/quality-gate.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+
+  release:
+    needs: [resolve, quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+    steps:
+      - name: Check out exact release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact release source
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse 'HEAD^{commit}')"
+          TAG_SHA="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+          test "$ACTUAL_SHA" = "$SOURCE_SHA"
+          test "$TAG_SHA" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.x'
+          package-manager-cache: false
+
+      - name: Verify version and build immutable source archive
+        run: |
+          set -euo pipefail
+          npm run release:verify -- "$RELEASE_TAG" --exact-head "$SOURCE_SHA" --require-clean
+          npm run release:package -- --official "$RUNNER_TEMP/release"
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.RELEASE_TAG }}-source
+          path: |
+            ${{ runner.temp }}/release/*.zip
+            ${{ runner.temp }}/release/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attest public source archive
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        with:
+          subject-path: ${{ runner.temp }}/release/*.zip
+
+      - name: Create immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            existing="$RUNNER_TEMP/existing-release"
+            mkdir -p "$existing"
+            gh release download "$RELEASE_TAG" --dir "$existing"
+            for asset in "$RUNNER_TEMP"/release/*; do
+              name="$(basename "$asset")"
+              test -f "$existing/$name"
+              cmp --silent "$asset" "$existing/$name"
+            done
+            echo "Release $RELEASE_TAG already exists with byte-identical assets."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP"/release/* \
+            --verify-tag \
+            --generate-notes \
+            --title "Feishu Agent Platform ${RELEASE_TAG#v}"
+
+  publish-ghcr:
+    name: Publish release image to GHCR
+    if: vars.PUBLISH_GHCR == 'true'
+    needs: [resolve, quality, release]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/container.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      publish_tag: ${{ needs.resolve.outputs.release_tag }}
+    secrets: inherit

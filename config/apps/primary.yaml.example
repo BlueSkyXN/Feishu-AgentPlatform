@@ -1,0 +1,42 @@
+id: primary
+enabled: true
+
+appIdEnv: FEISHU_PRIMARY_APP_ID
+appSecretEnv: FEISHU_PRIMARY_APP_SECRET
+verificationTokenEnv: FEISHU_PRIMARY_VERIFICATION_TOKEN
+domain: feishu
+
+events:
+  transport: websocket
+  path: /public/feishu/primary/events
+
+callbacks:
+  transport: http
+  path: /public/feishu/primary/callbacks
+
+policy:
+  requireMention: true
+  dmMode: open
+  dmAllowlist: []
+  groupAllowlist: []
+  respondToMentionAll: false
+
+attachments:
+  enabled: true
+  maxItems: 6
+  maxBytesPerItem: 12582912
+  maxTotalBytes: 31457280
+  passImagesToModel: true
+  persistFiles: true
+
+identity:
+  resolveUserProfile: true
+  profileCacheTtlSeconds: 86400
+
+oauth:
+  enabled: false
+  publicBaseUrlEnv: PUBLIC_BASE_URL
+  redirectPath: /public/oauth/primary/callback
+  scopes: []
+  stateTtlSeconds: 600
+  encryptionKeyEnv: OAUTH_TOKEN_ENCRYPTION_KEY

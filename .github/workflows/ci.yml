@@ -1,0 +1,98 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to verify and optionally deploy
+        required: false
+        default: main
+        type: string
+      deploy_hf:
+        description: Deploy the verified commit to Hugging Face Space
+        required: false
+        default: true
+        type: boolean
+      publish_ghcr:
+        description: Publish the verified commit to GHCR
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    name: Resolve immutable source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    steps:
+      - name: Check out requested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve requested ref to an immutable commit
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REQUESTED_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ -n "$REQUESTED_REF" && "$REQUESTED_REF" != -* ]]
+          SOURCE_SHA="$(git rev-parse --verify --end-of-options "${REQUESTED_REF}^{commit}")"
+          HEAD_SHA="$(git rev-parse 'HEAD^{commit}')"
+          test "$HEAD_SHA" = "$SOURCE_SHA"
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            test "$SOURCE_SHA" = "$EVENT_SHA"
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          printf 'source_sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Exact-head quality gate
+    needs: resolve
+    uses: ./.github/workflows/quality-gate.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+
+  deploy-hf:
+    name: Deploy verified source to Hugging Face
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HF_AUTO_DEPLOY == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_hf)
+    needs: [resolve, quality]
+    uses: ./.github/workflows/hf-space.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+    secrets: inherit
+
+  publish-ghcr:
+    name: Publish verified image to GHCR
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_GHCR == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_ghcr)
+    needs: [resolve, quality]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/container.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      publish_latest: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    secrets: inherit

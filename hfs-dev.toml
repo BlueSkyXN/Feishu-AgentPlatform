@@ -1,0 +1,18 @@
+standard = "2.1"
+project = "feishu-agent-platform"
+space = "BlueSkyXN/Feishu-AgentPlatform"
+project_class = "production"
+target_role = "primary"
+sovereignty = "sovereign"
+lane = "source"
+version_source = "commit"
+env_file = "local/hfs-targets/production.env"
+
+local_only = ["HF_TOKEN", "GH_TOKEN"]
+secrets = ["ADMIN_TOKEN", "PLATFORM_MASTER_KEY"]
+variables = []
+
+seed_file = ""
+other_objects = []
+
+deviations = []
