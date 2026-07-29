@@ -1,4 +1,4 @@
-standard = "2.1"
+standard = "2.0"
 project = "feishu-agent-platform"
 space = "BlueSkyXN/Feishu-AgentPlatform"
 project_class = "production"
