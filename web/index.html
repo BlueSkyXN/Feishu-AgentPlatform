@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+  <title>飞书 Agent Platform 管理台</title>
+  <link rel="stylesheet" href="/admin/styles.css">
+  <script type="module" src="/admin/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">跳到主要内容</a>
+  <div class="shell">
+    <header class="masthead">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">F</span>
+        <div>
+          <p class="eyebrow">FEISHU AGENT PLATFORM</p>
+          <h1>平台控制台</h1>
+        </div>
+      </div>
+      <div class="session-panel">
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span id="session-label">正在检查会话</span>
+        <button id="logout-button" class="button ghost inverse" type="button" hidden>退出</button>
+      </div>
+    </header>
+
+    <main id="workspace">
+      <section id="login-view" class="login-card" aria-labelledby="login-title">
+        <div class="login-intro">
+          <p class="section-kicker">ADMIN ACCESS</p>
+          <h2 id="login-title">管理员登录</h2>
+          <p>管理台只通过服务端会话工作。Bootstrap Token 与凭据都不会写入浏览器存储，也不会出现在 URL 中。</p>
+          <dl class="security-list">
+            <div><dt>会话</dt><dd>HttpOnly Cookie</dd></div>
+            <div><dt>写操作</dt><dd>CSRF 保护</dd></div>
+            <div><dt>生产访问</dt><dd>必须使用 HTTPS</dd></div>
+          </dl>
+        </div>
+
+        <div class="login-methods">
+          <form id="login-form" class="card stack-form" aria-describedby="token-login-help">
+            <div>
+              <p class="method-label">方式一</p>
+              <h3>Bootstrap Token</h3>
+            </div>
+            <p id="token-login-help" class="muted">使用部署环境中的 <code>ADMIN_TOKEN</code> 建立短期管理会话。</p>
+            <label for="admin-token">ADMIN_TOKEN</label>
+            <input id="admin-token" name="token" type="password" autocomplete="current-password" required>
+            <button class="button primary" type="submit">进入管理台</button>
+          </form>
+
+          <div class="method-divider" aria-hidden="true"><span>或</span></div>
+
+          <form id="sso-form" class="card stack-form" aria-describedby="sso-login-help">
+            <div>
+              <p class="method-label">方式二</p>
+              <h3>飞书 SSO</h3>
+            </div>
+            <p id="sso-login-help" class="muted">选择已部署且启用 OAuth 的 <code>appKey</code>。服务端未启用 SSO 时会返回明确错误。</p>
+            <label for="sso-app-key">appKey</label>
+            <input id="sso-app-key" name="appKey" type="text" list="app-key-options" autocomplete="off" placeholder="例如 primary" required>
+            <datalist id="app-key-options"></datalist>
+            <button class="button secondary" type="submit">使用飞书身份登录</button>
+          </form>
+
+          <div id="login-status" class="inline-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <div id="console-view" class="console" hidden>
+        <nav class="nav-rail" aria-label="管理台导航">
+          <p class="nav-label">平台</p>
+          <button type="button" data-view="overview" class="active" aria-current="page"><span>总览</span></button>
+          <button type="button" data-view="apps"><span>Apps</span></button>
+          <button type="button" data-view="agents"><span>Agents</span></button>
+          <button type="button" data-view="bindings"><span>Bindings</span></button>
+          <p class="nav-label">交付</p>
+          <button type="button" data-view="config"><span>配置草稿</span></button>
+          <button type="button" data-view="revisions"><span>Revisions</span></button>
+          <button type="button" data-view="credentials"><span>凭据</span></button>
+          <p class="nav-label">运行</p>
+          <button type="button" data-view="sessions"><span>Sessions</span></button>
+          <button type="button" data-view="approvals"><span>Approvals</span></button>
+          <button type="button" data-view="diagnostics"><span>lark-cli 诊断</span></button>
+          <button type="button" data-view="audit"><span>审计</span></button>
+        </nav>
+
+        <section class="workspace">
+          <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+          <article data-panel="overview" aria-labelledby="overview-title">
+            <div class="section-heading">
+              <div><p class="section-kicker">运行与配置</p><h2 id="overview-title">总览</h2></div>
+              <button class="button ghost" type="button" data-refresh="overview">刷新</button>
+            </div>
+            <div class="panel-status" data-panel-status="overview" role="status" aria-live="polite" hidden></div>
+            <div data-panel-content="overview">
+              <div id="overview-cards" class="metric-grid"></div>
+              <div class="card"><h3>注意事项</h3><ul id="overview-warnings" class="plain-list"></ul></div>
+            </div>
+          </article>
+
+          <article data-panel="apps" aria-labelledby="apps-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">飞书身份 · Draft</p><h2 id="apps-title">Apps</h2><p id="apps-base" class="section-meta"></p></div>
+              <div class="heading-actions"><button class="button primary" type="button" data-create-kind="apps">新建 App</button><button class="button ghost" type="button" data-refresh="apps">刷新</button></div>
+            </div>
+            <div class="panel-status" data-panel-status="apps" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="apps"><table><thead><tr><th>ID</th><th>状态</th><th>Domain</th><th>Events</th><th>Callbacks</th><th>操作</th></tr></thead><tbody id="apps-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="agents" aria-labelledby="agents-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">模型运行时 · Draft</p><h2 id="agents-title">Agents</h2><p id="agents-base" class="section-meta"></p></div>
+              <div class="heading-actions"><button class="button primary" type="button" data-create-kind="agents">新建 Agent</button><button class="button ghost" type="button" data-refresh="agents">刷新</button></div>
+            </div>
+            <div class="panel-status" data-panel-status="agents" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="agents"><table><thead><tr><th>ID</th><th>状态</th><th>Provider</th><th>Model / API</th><th>隔离</th><th>Workspace</th><th>操作</th></tr></thead><tbody id="agents-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="bindings" aria-labelledby="bindings-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">显式路由边 · Draft</p><h2 id="bindings-title">Bindings</h2><p id="bindings-base" class="section-meta"></p></div>
+              <div class="heading-actions"><button class="button primary" type="button" data-create-kind="bindings">新建 Binding</button><button class="button ghost" type="button" data-refresh="bindings">刷新</button></div>
+            </div>
+            <div class="panel-status" data-panel-status="bindings" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="bindings"><table><thead><tr><th>ID</th><th>状态</th><th>App</th><th>Agent</th><th>Default</th><th>Priority</th><th>操作</th></tr></thead><tbody id="bindings-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="config" aria-labelledby="config-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">Revisioned document</p><h2 id="config-title">配置草稿</h2></div>
+              <button class="button ghost" type="button" data-refresh="config">重新载入</button>
+            </div>
+            <div class="panel-status" data-panel-status="config" role="status" aria-live="polite" hidden></div>
+            <div class="split-grid" data-panel-content="config">
+              <form id="draft-form" class="card stack-form">
+                <div><h3>编辑 Draft</h3><p id="draft-base-label" class="muted"></p></div>
+                <label for="draft-document">JSON 配置文档</label>
+                <textarea id="draft-document" rows="25" spellcheck="false" required></textarea>
+                <label for="draft-note">变更说明</label>
+                <input id="draft-note" type="text" maxlength="1000">
+                <div class="form-actions"><button class="button primary" type="submit">保存 Draft</button><button id="validate-draft-button" class="button secondary" type="button">显式校验已保存 Draft</button></div>
+                <div id="validation-result" class="validation-result" role="status" aria-live="polite" hidden></div>
+              </form>
+              <div class="stack">
+                <form id="publish-form" class="card stack-form">
+                  <div class="risk-heading"><span class="risk-marker" aria-hidden="true">!</span><h3>发布 Draft</h3></div>
+                  <p>服务端发布前会再次校验，并把 Draft 切换为 Active。运行时应用失败与配置写入成功是两个独立结果。</p>
+                  <label for="publish-note">发布说明</label>
+                  <input id="publish-note" type="text" maxlength="1000">
+                  <button class="button danger" type="submit">发布当前 Draft</button>
+                </form>
+                <div class="card"><h3>Active 摘要</h3><dl id="active-summary" class="detail-list"></dl></div>
+              </div>
+            </div>
+          </article>
+
+          <article data-panel="revisions" aria-labelledby="revisions-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">历史、比对与恢复</p><h2 id="revisions-title">Revisions</h2></div>
+              <button class="button ghost" type="button" data-refresh="revisions">刷新</button>
+            </div>
+            <div class="panel-status" data-panel-status="revisions" role="status" aria-live="polite" hidden></div>
+            <div data-panel-content="revisions">
+              <div class="table-wrap"><table><thead><tr><th>ID</th><th>Slot</th><th>创建者</th><th>创建时间</th><th>Digest</th><th>说明</th><th>操作</th></tr></thead><tbody id="revisions-body"></tbody></table></div>
+              <form id="rollback-form" class="card inline-form">
+                <div><h3>发布回滚 Revision</h3><p>回滚会基于历史内容创建新的 Active revision，原历史不会被覆盖。</p></div>
+                <label for="rollback-id">目标 Revision ID<input id="rollback-id" type="number" min="1" required></label>
+                <label for="rollback-note">回滚说明<input id="rollback-note" type="text" maxlength="1000"></label>
+                <button class="button danger" type="submit">确认回滚</button>
+              </form>
+            </div>
+          </article>
+
+          <article data-panel="credentials" aria-labelledby="credentials-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">Encrypted vault</p><h2 id="credentials-title">凭据</h2></div>
+              <button class="button ghost" type="button" data-refresh="credentials">刷新</button>
+            </div>
+            <div class="panel-status" data-panel-status="credentials" role="status" aria-live="polite" hidden></div>
+            <div class="split-grid" data-panel-content="credentials">
+              <div class="table-wrap"><table><thead><tr><th>名称</th><th>类型</th><th>状态</th><th>Fingerprint</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="credentials-body"></tbody></table></div>
+              <form id="credential-form" class="card stack-form">
+                <div><h3>录入或轮换凭据</h3><p class="muted">Secret 只随本次请求发送。响应和列表仅显示状态及 fingerprint，不回显明文。</p></div>
+                <label for="credential-name">名称</label>
+                <input id="credential-name" type="text" placeholder="apps/primary/app-secret" autocomplete="off" required>
+                <label for="credential-kind">类型</label>
+                <input id="credential-kind" type="text" value="feishu-app-secret" autocomplete="off" required>
+                <label for="credential-value">Secret</label>
+                <input id="credential-value" type="password" autocomplete="new-password" required>
+                <div class="form-actions"><button class="button primary" type="submit">加密保存 / 轮换</button><button id="credential-delete-button" class="button danger-outline" type="button">删除指定凭据</button></div>
+              </form>
+            </div>
+          </article>
+
+          <article data-panel="sessions" aria-labelledby="sessions-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">运行会话</p><h2 id="sessions-title">Sessions</h2></div>
+              <button class="button ghost" type="button" data-refresh="sessions">刷新</button>
+            </div>
+            <form id="session-filter-form" class="filter-bar">
+              <label for="session-app-filter">App<input id="session-app-filter" type="text" autocomplete="off"></label>
+              <label for="session-agent-filter">Agent<input id="session-agent-filter" type="text" autocomplete="off"></label>
+              <label for="session-binding-filter">Binding<input id="session-binding-filter" type="text" autocomplete="off"></label>
+              <button class="button secondary" type="submit">应用筛选</button>
+              <button id="session-filter-clear" class="button ghost" type="button">清除</button>
+            </form>
+            <div class="panel-status" data-panel-status="sessions" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="sessions"><table><thead><tr><th>Storage ID</th><th>App / Agent</th><th>Binding</th><th>Conversation</th><th>驻留</th><th>最后使用</th><th>操作</th></tr></thead><tbody id="sessions-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="approvals" aria-labelledby="approvals-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">工具审批</p><h2 id="approvals-title">Approvals</h2></div>
+              <button class="button ghost" type="button" data-refresh="approvals">刷新</button>
+            </div>
+            <div class="capability-note"><strong>处置边界：</strong>管理台只可处理 <code>approval=admin</code> 的 pending 审批；<code>approval=requester</code> 仍必须由原请求者在飞书中完成。</div>
+            <form id="approval-filter-form" class="filter-bar compact">
+              <label for="approval-state-filter">状态<select id="approval-state-filter"><option value="">全部</option><option value="pending">pending</option><option value="approved">approved</option><option value="denied">denied</option><option value="expired">expired</option><option value="aborted">aborted</option></select></label>
+              <button class="button secondary" type="submit">应用筛选</button>
+            </form>
+            <div class="panel-status" data-panel-status="approvals" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="approvals"><table><thead><tr><th>ID</th><th>状态</th><th>App / Agent</th><th>操作</th><th>申请人</th><th>到期时间</th><th>处置</th></tr></thead><tbody id="approvals-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="diagnostics" aria-labelledby="diagnostics-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">Profile · Version · Read / Write</p><h2 id="diagnostics-title">lark-cli 诊断</h2></div>
+              <button class="button ghost" type="button" data-refresh="diagnostics">刷新</button>
+            </div>
+            <div class="capability-note"><strong>证据范围：</strong>这里读取后端运行时快照，展示 profile 初始化、版本匹配和绑定就绪状态。后端未提供从管理台触发真实读写 smoke 的接口，因此“读写就绪”不等于已执行外部写入验收。</div>
+            <div class="panel-status" data-panel-status="diagnostics" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="diagnostics"><table><thead><tr><th>App</th><th>Binding / Agent</th><th>启用</th><th>Profile</th><th>Version</th><th>读写就绪</th><th>错误</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
+          </article>
+
+          <article data-panel="audit" aria-labelledby="audit-title" hidden>
+            <div class="section-heading">
+              <div><p class="section-kicker">可追溯操作记录</p><h2 id="audit-title">审计</h2></div>
+              <button class="button ghost" type="button" data-refresh="audit">刷新</button>
+            </div>
+            <div class="panel-status" data-panel-status="audit" role="status" aria-live="polite" hidden></div>
+            <div class="table-wrap" data-panel-content="audit"><table><thead><tr><th>ID</th><th>时间</th><th>Actor</th><th>Action</th><th>对象</th><th>详情</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+          </article>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="entity-dialog" class="modal" aria-labelledby="entity-dialog-title" aria-describedby="entity-dialog-description">
+    <form id="entity-form" class="modal-card">
+      <div class="modal-heading"><div><p class="section-kicker">DRAFT ENTITY</p><h2 id="entity-dialog-title">编辑实体</h2></div><button class="icon-button" type="button" data-dialog-close="entity-dialog" aria-label="关闭">×</button></div>
+      <p id="entity-dialog-description" class="muted"></p>
+      <label for="entity-id">实体 ID</label>
+      <input id="entity-id" type="text" autocomplete="off" required>
+      <label for="entity-json">实体 JSON</label>
+      <textarea id="entity-json" rows="18" spellcheck="false" required></textarea>
+      <p class="field-help">服务端会固定使用上方 ID，并对整个配置文档执行校验。</p>
+      <div id="entity-error" class="form-error" role="alert" hidden></div>
+      <div class="modal-actions"><button class="button ghost" type="button" data-dialog-close="entity-dialog">取消</button><button id="entity-submit" class="button primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="modal" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-description">
+    <form id="confirm-form" class="modal-card compact-modal">
+      <div class="modal-heading"><div><p class="section-kicker">CONFIRM ACTION</p><h2 id="confirm-dialog-title">确认操作</h2></div><button class="icon-button" type="button" data-confirm-cancel aria-label="关闭">×</button></div>
+      <p id="confirm-dialog-description"></p>
+      <div id="confirm-input-wrap" class="stack-form" hidden><label id="confirm-input-label" for="confirm-input">确认值</label><input id="confirm-input" type="text" autocomplete="off"></div>
+      <div id="confirm-error" class="form-error" role="alert" hidden></div>
+      <div class="modal-actions"><button class="button ghost" type="button" data-confirm-cancel>取消</button><button id="confirm-submit" class="button danger" type="submit">确认</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="revision-dialog" class="modal wide" aria-labelledby="revision-dialog-title">
+    <div class="modal-card">
+      <div class="modal-heading"><div><p class="section-kicker">REVISION DETAIL</p><h2 id="revision-dialog-title">Revision</h2></div><button class="icon-button" type="button" data-dialog-close="revision-dialog" aria-label="关闭">×</button></div>
+      <dl id="revision-detail" class="detail-list"></dl>
+      <pre id="revision-document" class="json-view"></pre>
+      <div class="modal-actions"><button class="button primary" type="button" data-dialog-close="revision-dialog">关闭</button></div>
+    </div>
+  </dialog>
+</body>
+</html>

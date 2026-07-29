@@ -1,0 +1,49 @@
+id: general
+enabled: true
+
+systemPromptFile: prompts/general.md
+provider: host-broker
+model: gpt-5.1
+modelApi: openai-responses
+upstreamPath: /openai
+modelOptions:
+  reasoning: true
+  input: [text, image]
+  contextWindow: 400000
+  maxTokens: 32768
+thinkingLevel: medium
+
+runtime:
+  isolation: process
+  workerShutdownGraceSeconds: 10
+
+workspace:
+  mode: read-only
+  maxReadBytes: 2097152
+  maxWriteBytes: 2097152
+  maxTotalBytes: 268435456
+  maxFiles: 10000
+
+tools:
+  defaultIdentity: app
+  allowCrossChatRead: false
+  feishu:
+    - user.profile
+    - chat.info
+    - message.history
+    - doc.read
+  workspace:
+    - workspace.list
+    - workspace.read
+    - workspace.search
+  openApiReadAllowlist: []
+
+skillPaths: []
+
+larkCli:
+  enabled: false
+  executable: lark-cli
+  expectedVersion: 1.0.79
+  timeoutMs: 60000
+  operations: []
+  skills: []

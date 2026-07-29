@@ -1,0 +1,34 @@
+[Unit]
+Description=Feishu Agent Platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=feishu-agent
+Group=feishu-agent
+WorkingDirectory=/opt/feishu-agent-platform
+EnvironmentFile=/etc/feishu-agent-platform.env
+Environment=NODE_ENV=production
+Environment=PUBLIC_HTTP_HOST=0.0.0.0
+Environment=PUBLIC_HTTP_PORT=7860
+Environment=INTERNAL_HTTP_HOST=127.0.0.1
+Environment=INTERNAL_HTTP_PORT=8788
+Environment=MODEL_BROKER_HOST=127.0.0.1
+Environment=MODEL_BROKER_PORT=8790
+Environment=PLATFORM_CONFIG_ROOT=/opt/feishu-agent-platform/config
+Environment=DATA_ROOT=/var/lib/feishu-agent-platform
+Environment=PLATFORM_DATABASE_PATH=/var/lib/feishu-agent-platform/platform.db
+ExecStart=/usr/bin/node /opt/feishu-agent-platform/dist/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/feishu-agent-platform
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

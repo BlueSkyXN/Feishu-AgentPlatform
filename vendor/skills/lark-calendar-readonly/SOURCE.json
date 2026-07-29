@@ -1,0 +1,7 @@
+{
+  "kind": "project-authored-read-only-adaptation",
+  "inspiration": "https://github.com/larksuite/cli",
+  "larkCliVersion": "1.0.79",
+  "license": "Project license",
+  "notes": "This file is original project guidance and does not copy the upstream Skill text."
+}

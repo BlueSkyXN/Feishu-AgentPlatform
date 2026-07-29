@@ -1,0 +1,14 @@
+node_modules
+.git
+.github
+.env
+dist
+.test-dist
+.offline-dist
+coverage
+data
+*.zip
+*.log
+local
+.visual-brainstorming
+.DS_Store
