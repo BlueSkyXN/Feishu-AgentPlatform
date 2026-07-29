@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24-bookworm-slim AS dependency-base
+FROM node:26-bookworm-slim AS dependency-base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
@@ -21,7 +21,7 @@ COPY scripts/patch-pi-brace-expansion.mjs ./scripts/patch-pi-brace-expansion.mjs
 RUN npm ci --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     NODE_OPTIONS=--enable-source-maps \
     PATH=/app/node_modules/.bin:$PATH \
