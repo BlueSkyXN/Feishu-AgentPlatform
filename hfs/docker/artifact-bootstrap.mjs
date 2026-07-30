@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { cp, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -118,19 +118,68 @@ export function assertTarListingSafe(listing) {
     throw new ContractError(`payload archive exceeds ${MAX_TAR_MEMBERS} members.`);
   }
   let totalBytes = 0;
+  const memberPaths = new Set();
+  const symlinks = [];
   for (const line of lines) {
     const match = /^(\S+)\s+\S+\/\S+\s+(\d+)\s+\S+\s+\S+\s+(.+)$/u.exec(line);
     if (!match) throw new ContractError(`unparseable tar listing entry: ${line.slice(0, 120)}`);
-    const [, mode, sizeText, name] = match;
+    const [, mode, sizeText, description] = match;
     totalBytes += Number.parseInt(sizeText, 10);
     if (totalBytes > MAX_EXTRACTED_BYTES) {
       throw new ContractError('payload archive exceeds the extracted size limit.');
     }
-    if (name.startsWith('/') || name.includes('..') || name.includes('\\') || name.includes(':')) {
+
+    let name = description;
+    let target;
+    if (mode.startsWith('l')) {
+      const marker = ' -> ';
+      const markerIndex = description.indexOf(marker);
+      if (markerIndex <= 0 || markerIndex !== description.lastIndexOf(marker)) {
+        throw new ContractError(`unparseable payload symlink entry: ${line.slice(0, 120)}`);
+      }
+      name = description.slice(0, markerIndex);
+      target = description.slice(markerIndex + marker.length);
+    } else if (!mode.startsWith('-') && !mode.startsWith('d')) {
+      throw new ContractError(`payload member must be a regular file, directory, or symlink: ${name.slice(0, 120)}`);
+    }
+
+    if (
+      !name ||
+      posix.isAbsolute(name) ||
+      name.includes('\\') ||
+      name.includes(':') ||
+      name.split('/').includes('..') ||
+      /[\u0000-\u001f\u007f]/u.test(name)
+    ) {
       throw new ContractError(`unsafe payload member path: ${name.slice(0, 120)}`);
     }
-    if (!mode.startsWith('-') && !mode.startsWith('d')) {
-      throw new ContractError(`payload member must be a regular file or directory: ${name.slice(0, 120)}`);
+    const normalizedName = posix.normalize(name).replace(/\/$/u, '') || '.';
+    memberPaths.add(normalizedName);
+
+    if (target !== undefined) {
+      if (
+        !target ||
+        posix.isAbsolute(target) ||
+        target.includes('\\') ||
+        target.includes(':') ||
+        /[\u0000-\u001f\u007f]/u.test(target)
+      ) {
+        throw new ContractError(`unsafe payload symlink target: ${target.slice(0, 120)}`);
+      }
+      const normalizedTarget = posix
+        .normalize(posix.join(posix.dirname(normalizedName), target))
+        .replace(/\/$/u, '') || '.';
+      if (normalizedTarget === '..' || normalizedTarget.startsWith('../')) {
+        throw new ContractError(`unsafe payload symlink target: ${target.slice(0, 120)}`);
+      }
+      symlinks.push({ name: normalizedName, target: normalizedTarget });
+    }
+  }
+  for (const symlink of symlinks) {
+    if (!memberPaths.has(symlink.target)) {
+      throw new ContractError(
+        `payload symlink target is missing: ${symlink.name.slice(0, 80)} -> ${symlink.target.slice(0, 80)}`,
+      );
     }
   }
 }

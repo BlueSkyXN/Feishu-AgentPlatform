@@ -8,6 +8,7 @@ FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production \
     NODE_OPTIONS=--enable-source-maps \
+    PATH=/opt/app/node_modules/.bin:$PATH \
     PORT=7860 \
     PUBLIC_HTTP_HOST=0.0.0.0 \
     PUBLIC_HTTP_PORT=7860 \

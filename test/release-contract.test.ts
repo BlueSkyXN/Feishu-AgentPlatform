@@ -164,6 +164,7 @@ test('HFS Space bundle is thin and bootstraps the artifact at startup', async ()
   assert.match(readme, /app_port:\s*7860/u);
   assert.match(dockerfile, /EXPOSE\s+7860/u);
   assert.match(dockerfile, /USER\s+node/u);
+  assert.match(dockerfile, /PATH=\/opt\/app\/node_modules\/\.bin:\$PATH/u);
   assert.doesNotMatch(dockerfile, /MODEL_BROKER_ENABLED=true/);
   assert.doesNotMatch(dockerfile, /COPY\s+.*dist|COPY\s+.*src/u);
   assert.match(entrypoint, /FAP_ARTIFACT_MANIFEST_HF_URI/u);
