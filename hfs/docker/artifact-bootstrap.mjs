@@ -41,10 +41,10 @@ export function parseManifestUri(uri) {
     throw new ContractError('FAP_ARTIFACT_MANIFEST_HF_URI must be an hf://buckets URI without query or fragment.');
   }
   const parts = parsed.pathname.split('/').filter(Boolean).map(decodeURIComponent);
-  if (parts.length !== 5 || parts.some((part) => part === '.' || part === '..' || part.includes('\\'))) {
-    throw new ContractError('artifact manifest URI must contain five safe path segments.');
+  if (parts.length !== 6 || parts.some((part) => part === '.' || part === '..' || part.includes('\\'))) {
+    throw new ContractError('artifact manifest URI must contain six safe path segments.');
   }
-  const [namespace, bucket, project, slot, filename] = parts;
+  const [namespace, bucket, project, slot, sourceSha, filename] = parts;
   if (!NAMESPACE_RE.test(namespace)) throw new ContractError('artifact manifest URI namespace is invalid.');
   if (bucket !== BUCKET || project !== PROJECT || !SLOTS.has(slot)) {
     throw new ContractError(`artifact manifest URI must select ${BUCKET}/${PROJECT}/<edge|release>.`);
@@ -52,7 +52,6 @@ export function parseManifestUri(uri) {
   if (filename !== 'manifest.json') {
     throw new ContractError('artifact manifest URI must end with manifest.json.');
   }
-  const sourceSha = parts[3];
   if (!GIT_SHA_RE.test(sourceSha)) {
     throw new ContractError('artifact manifest URI must pin a full lowercase source commit SHA.');
   }

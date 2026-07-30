@@ -74,7 +74,7 @@ async function assertNoSymlinks(directory, label) {
   }
 }
 
-async function copyConfigExamples(sourceRoot, stagingRoot) {
+export async function copyConfigExamples(sourceRoot, stagingRoot) {
   const configRoot = resolve(sourceRoot, 'config');
   const failures = [];
   const copied = [];
