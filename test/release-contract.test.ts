@@ -111,8 +111,16 @@ test('CI/CD verifies one immutable source before invoking HF and GHCR publishers
 test('HF deployment preserves setup mode and verifies the exact remote runtime', async () => {
   const workflow = await source('.github/workflows/hf-space.yml');
   assert.doesNotMatch(workflow, /cp\s+"\$example"/);
-  assert.match(workflow, /active YAML manifests are forbidden/);
+  assert.match(workflow, /package-artifact\.mjs --source-sha/);
+  assert.match(workflow, /hf buckets cp/);
+  assert.match(workflow, /hfs-dist/);
+  assert.match(workflow, /git archive --format=tar "\$SOURCE_SHA" hfs/);
   assert.match(workflow, /DEPLOYMENT_SOURCE\.json/);
+  assert.match(workflow, /hf spaces variables add/);
+  assert.match(workflow, /FAP_ARTIFACT_MANIFEST_HF_URI/);
+  assert.match(workflow, /FAP_ARTIFACT_EXPECTED_SOURCE_REF/);
+  assert.match(workflow, /FAP_ARTIFACT_MAX_BYTES/);
+  assert.match(workflow, /hf spaces restart/);
   assert.match(workflow, /python3 scripts\/hf-space-info\.py/);
   assert.match(workflow, /Hugging Face SDK readback contract/);
   assert.doesNotMatch(workflow, /hf spaces info|--json/);
@@ -131,11 +139,45 @@ test('HF deployment preserves setup mode and verifies the exact remote runtime',
   assert.match(workflow, /pushed-sha\.txt/);
 });
 
-test('HFS source deployment is bound to immutable commits', async () => {
-  const manifest = await source('hfs-dev.toml');
+test('HFS artifact lane deployment is bound to immutable commits', async () => {
+  const manifest = await source('hfs/hfs-dev.toml');
   assert.match(manifest, /^standard = "2\.0"$/mu);
   assert.match(manifest, /version_source = "commit"/);
+  assert.match(manifest, /lane = "artifact"/);
+  assert.match(manifest, /dist_bucket = "hfs-dist"/);
   assert.doesNotMatch(manifest, /uncommitted preview/);
+});
+
+test('HFS Space bundle is thin and bootstraps the artifact at startup', async () => {
+  const [dockerfile, entrypoint, bootstrap, readme] = await Promise.all([
+    source('hfs/Dockerfile'),
+    source('hfs/docker/entrypoint.sh'),
+    source('hfs/docker/artifact-bootstrap.mjs'),
+    source('hfs/README.md'),
+  ]);
+  assert.match(readme, /sdk:\s*docker/u);
+  assert.match(readme, /app_port:\s*7860/u);
+  assert.match(dockerfile, /EXPOSE\s+7860/u);
+  assert.match(dockerfile, /USER\s+node/u);
+  assert.doesNotMatch(dockerfile, /MODEL_BROKER_ENABLED=true/);
+  assert.doesNotMatch(dockerfile, /COPY\s+.*dist|COPY\s+.*src/u);
+  assert.match(entrypoint, /FAP_ARTIFACT_MANIFEST_HF_URI/u);
+  assert.match(entrypoint, /FAP_ARTIFACT_BEARER_TOKEN/u);
+  assert.match(entrypoint, /FAP_ARTIFACT_EXPECTED_SOURCE_REF/u);
+  assert.match(entrypoint, /fap-artifact-bootstrap\.mjs/u);
+  assert.match(entrypoint, /exec node dist\/index\.js/u);
+  assert.match(bootstrap, /sha256/u);
+  assert.match(bootstrap, /payload\.tar\.gz/u);
+  assert.match(bootstrap, /hfs-dist/u);
+});
+
+test('artifact packager ships the production runtime with config examples only', async () => {
+  const packager = await source('scripts/package-artifact.mjs');
+  assert.match(packager, /--omit=dev/u);
+  assert.match(packager, /payload\.tar\.gz/u);
+  assert.match(packager, /manifest\.json/u);
+  assert.match(packager, /active YAML manifests are forbidden/u);
+  assert.match(packager, /patch-pi-brace-expansion\.mjs/u);
 });
 
 test('Pi nested brace-expansion is patched to the audited version', async () => {
