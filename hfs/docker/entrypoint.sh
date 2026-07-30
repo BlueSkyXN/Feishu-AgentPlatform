@@ -22,7 +22,7 @@ if [ ! -d /data ] || [ -L /data ] || [ ! -w /data ]; then
   fail "persistent /data mount is missing, unsafe, or not writable"
 fi
 
-install_root="${FAP_ARTIFACT_INSTALL_ROOT:-/opt/app}"
+install_root="${FAP_ARTIFACT_INSTALL_ROOT:-/opt/feishu-agent-platform/app}"
 marker="$install_root/.artifact-source-ref"
 current=""
 if [ -f "$marker" ]; then
@@ -36,6 +36,6 @@ else
   log "artifact for source ${FAP_ARTIFACT_EXPECTED_SOURCE_REF} already installed"
 fi
 
-cd /opt/app
+cd "$install_root"
 log "starting platform (public :${PUBLIC_HTTP_PORT:-7860})"
 exec node dist/index.js
