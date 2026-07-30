@@ -37,6 +37,7 @@ interface PackagerModule {
 }
 
 interface BootstrapModule {
+  assertTarListingSafe(listing: string): void;
   parseManifestUri(uri: string): ArtifactUri;
   validateManifest(
     raw: unknown,
@@ -89,6 +90,27 @@ test('artifact producer URI and manifest are accepted by the runtime consumer', 
       bytes: 1234,
       url: `https://huggingface.co/buckets/BlueSkyXN/hfs-dist/resolve/feishu-agent-platform/edge/${sourceSha}/payload.tar.gz`,
     },
+  );
+});
+
+test('artifact bootstrap accepts in-root npm bin symlinks and rejects escaping links', async () => {
+  const bootstrap = await loadModule<BootstrapModule>('hfs/docker/artifact-bootstrap.mjs');
+  const listing = [
+    'drwxr-xr-x user/group 0 2026-07-30 00:00 ./',
+    'drwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/',
+    'drwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/.bin/',
+    'drwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/openai/',
+    'drwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/openai/bin/',
+    '-rwxr-xr-x user/group 123 2026-07-30 00:00 ./node_modules/openai/bin/cli',
+    'lrwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/.bin/openai -> ../openai/bin/cli',
+  ].join('\n');
+
+  assert.doesNotThrow(() => bootstrap.assertTarListingSafe(listing));
+  assert.throws(
+    () => bootstrap.assertTarListingSafe(
+      `${listing}\nlrwxr-xr-x user/group 0 2026-07-30 00:00 ./node_modules/.bin/escape -> ../../../etc/passwd`,
+    ),
+    /unsafe payload symlink target/u,
   );
 });
 
