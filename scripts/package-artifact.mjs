@@ -74,7 +74,7 @@ async function assertNoSymlinks(directory, label) {
   }
 }
 
-async function copyConfigExamples(sourceRoot, stagingRoot) {
+export async function copyConfigExamples(sourceRoot, stagingRoot) {
   const configRoot = resolve(sourceRoot, 'config');
   const failures = [];
   const copied = [];
@@ -88,11 +88,11 @@ async function copyConfigExamples(sourceRoot, stagingRoot) {
         continue;
       }
       if (!entry.isFile()) continue;
-      if (/\.ya?ml$/u.test(entry.name) && !/\.example\.ya?ml$/u.test(entry.name)) {
+      if (/\.ya?ml$/u.test(entry.name)) {
         failures.push(rel);
         continue;
       }
-      if (!/\.example\.ya?ml$/u.test(entry.name)) continue;
+      if (!/\.ya?ml\.example$/u.test(entry.name)) continue;
       const target = resolve(stagingRoot, 'config', rel);
       await mkdir(resolve(target, '..'), { recursive: true });
       await cp(resolve(configRoot, rel), target);
