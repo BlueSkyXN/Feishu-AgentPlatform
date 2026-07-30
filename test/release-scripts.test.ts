@@ -245,6 +245,84 @@ test('HF SDK adapter emits stable JSON without serializing credentials', async (
   }
 });
 
+test('HF settings adapter writes and reads back variables before restart', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hf-space-settings-test-'));
+  const packageDirectory = join(temporary, 'huggingface_hub');
+  await mkdir(packageDirectory);
+  await writeFile(
+    join(packageDirectory, '__init__.py'),
+    [
+      'import os',
+      '',
+      'EXPECTED = {',
+      "    'FAP_ARTIFACT_MANIFEST_HF_URI': os.environ['FAP_ARTIFACT_MANIFEST_HF_URI'],",
+      "    'FAP_ARTIFACT_EXPECTED_SOURCE_REF': os.environ['FAP_ARTIFACT_EXPECTED_SOURCE_REF'],",
+      "    'FAP_ARTIFACT_MAX_BYTES': os.environ['FAP_ARTIFACT_MAX_BYTES'],",
+      '}',
+      '',
+      'class Variable:',
+      '    def __init__(self, value):',
+      '        self.value = value',
+      '',
+      'class HfApi:',
+      '    def __init__(self, token):',
+      "        assert token == 'test-secret-token'",
+      '        self.variables = {}',
+      '        self.restarted = False',
+      '    def add_space_variable(self, repo_id, key, value):',
+      "        assert repo_id == 'owner/space'",
+      '        assert EXPECTED[key] == value',
+      '        self.variables[key] = Variable(value)',
+      '    def get_space_variables(self, repo_id):',
+      "        assert repo_id == 'owner/space'",
+      "        if os.environ.get('CORRUPT_READBACK') == '1':",
+      "            self.variables['FAP_ARTIFACT_MAX_BYTES'] = Variable('1')",
+      '        return self.variables',
+      '    def restart_space(self, repo_id):',
+      "        assert repo_id == 'owner/space'",
+      '        assert not self.restarted',
+      '        assert {key: item.value for key, item in self.variables.items()} == EXPECTED',
+      '        self.restarted = True',
+      '        return object()',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  const sourceSha = 'a'.repeat(40);
+  const environment = {
+    PYTHONPATH: temporary,
+    HF_SPACE_ID: 'owner/space',
+    HF_TOKEN: 'test-secret-token',
+    FAP_ARTIFACT_MANIFEST_HF_URI:
+      `hf://buckets/owner/hfs-dist/feishu-agent-platform/edge/${sourceSha}/manifest.json`,
+    FAP_ARTIFACT_EXPECTED_SOURCE_REF: sourceSha,
+    FAP_ARTIFACT_MAX_BYTES: '268435456',
+  };
+
+  try {
+    const output = await commandOutput(
+      'python3',
+      ['scripts/hf-space-settings.py'],
+      root,
+      environment,
+    );
+    assert.equal(output, 'space_variables_verified=3\nspace_restart_requested=true\n');
+    assert.doesNotMatch(output, /test-secret-token/u);
+    await assert.rejects(
+      commandOutput(
+        'python3',
+        ['scripts/hf-space-settings.py'],
+        root,
+        { ...environment, CORRUPT_READBACK: '1' },
+      ),
+      /Space variable readback mismatch: FAP_ARTIFACT_MAX_BYTES/u,
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test('HF runtime evaluator fails closed and measures only continuous PAUSED time', async () => {
   const url = pathToFileURL(join(root, 'scripts', 'hf-space-runtime-state.mjs')).href;
   const { evaluateSpaceRuntime } = await import(url) as {
