@@ -110,23 +110,26 @@ Repository variable: HF_SPACE_ID=owner/space-name
 Environment secret (huggingface-space): HF_TOKEN=hf_xxx
 ```
 
-只在 `huggingface-space` Environment 中保存该 Token，不要再配置同名 Repository secret。自动部署只在明确设置 `HF_AUTO_DEPLOY=true` 后启用。同步使用干净 Git 归档，保持 setup mode，通过 HTTPS 推送；Token 不进入 YAML、remote URL、Commit 或日志。
+只在 `huggingface-space` Environment 中保存该 Token，不要再配置同名 Repository secret。自动部署只在明确设置 `HF_AUTO_DEPLOY=true` 后启用。
 
-部署 job 不在 `git push` 后立即成功：它继续等待 Space repo/runtime SHA 一致、`RUNNING`、域名 `READY`，并验证 `/healthz`、`/readyz` 与 `/admin`。映射信息写入 Space 的 `DEPLOYMENT_SOURCE.json` 和 GitHub Actions deployment evidence artifact。
+本项目采用 **artifact lane** 部署：workflow 在 exact-head 源码上构建运行时，用 `scripts/package-artifact.mjs` 打出不可变 payload tarball（`dist/`、`web/`、`prompts/`、`skills/`、`vendor/`、`config/*.example` 与 production `node_modules`，绝不含 TypeScript 源码、测试、文档与活跃 YAML 清单），连同 `manifest.json`（source_ref、sha256、bytes）上传至私有 bucket `hfs-dist/feishu-agent-platform/edge/<source_sha>/`；随后只把 `hfs/` 瘦 bundle（通用 Dockerfile + 启动引导脚本 + 净化 README）推送到 Space 仓库，并通过 HF API 将 `FAP_ARTIFACT_MANIFEST_HF_URI`、`FAP_ARTIFACT_EXPECTED_SOURCE_REF`、`FAP_ARTIFACT_MAX_BYTES` 写入 Space Variables 后重启。容器启动时由 bootstrap 按 manifest 指针拉取 payload、校验 source ref / sha256 / 体积上限 / tar 条目安全后安装运行；拉取或校验失败时 fail-closed。
+
+部署 job 不在 `git push` 后立即成功：它继续等待 Space repo/runtime SHA 一致、`RUNNING`、域名 `READY`，并验证 `/healthz`、`/readyz` 与 `/admin`。映射信息写入 Space 的 `DEPLOYMENT_SOURCE.json` 和 GitHub Actions deployment evidence artifact；exact-head 链为 `source_sha == manifest.source.ref == Space Variable == runtime`。
 
 ## HFS v2 登记
 
-根目录 `hfs-dev.toml` 将本项目登记为：
+`hfs/hfs-dev.toml` 将本项目登记为：
 
 ```text
 project_class=production
 target_role=primary
 sovereignty=sovereign
-lane=source
+lane=artifact
+dist_bucket=hfs-dist
 version_source=commit
 ```
 
-本地 HFS 设置事实源固定为 `local/hfs-targets/production.env`，权限必须是 `0600`，不进入 Git。`hfs-dev diff` 负责比较登记的 Space Secrets/Variables；GitHub Actions 负责 exact-head source 构建和部署。两者职责不同，不能用本地 env 文件代替 GitHub Environment Secret，也不能用 workflow 声明代替 HF Settings 回读。
+本地 HFS 设置事实源固定为 `local/hfs-targets/production.env`，权限必须是 `0600`，不进入 Git。`hfs-dev diff` 负责比较登记的 Space Secrets/Variables；GitHub Actions 负责 exact-head 构建、artifact 发布和部署。两者职责不同，不能用本地 env 文件代替 GitHub Environment Secret，也不能用 workflow 声明代替 HF Settings 回读。Space Secrets 中 `FAP_ARTIFACT_BEARER_TOKEN` 是容器启动时读取私有 bucket 的凭据，必须只保存在 HF 侧。
 
 ## 部署后验收
 

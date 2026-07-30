@@ -166,7 +166,7 @@ test('workflows pin Actions and gate release and HF deployment on resolved commi
     /git rev-parse --verify --end-of-options "\$\{REQUESTED_REF\}\^\{commit\}"/u,
   );
   assert.match(hf, /SOURCE_SHA/u);
-  assert.match(hf, /git archive --format=tar "\$SOURCE_SHA"/u);
+  assert.match(hf, /git archive --format=tar "\$SOURCE_SHA" hfs/u);
   assert.doesNotMatch(hf, /REQUESTED_REF/u);
 
   const quality = await readFile(join(workflowRoot, 'quality-gate.yml'), 'utf8');

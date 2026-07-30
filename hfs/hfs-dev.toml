@@ -1,18 +1,22 @@
 standard = "2.0"
 project = "feishu-agent-platform"
-space = "BlueSkyXN/Feishu-AgentPlatform"
+space = "BlueSkyXN/feishu-agent-platform-hfs"
 project_class = "production"
 target_role = "primary"
 sovereignty = "sovereign"
-lane = "source"
+lane = "artifact"
 version_source = "commit"
+dist_bucket = "hfs-dist"
 env_file = "local/hfs-targets/production.env"
 
 local_only = ["HF_TOKEN", "GH_TOKEN"]
-secrets = ["ADMIN_TOKEN", "PLATFORM_MASTER_KEY"]
-variables = []
+secrets = ["ADMIN_TOKEN", "PLATFORM_MASTER_KEY", "FAP_ARTIFACT_BEARER_TOKEN"]
+variables = [
+  "FAP_ARTIFACT_MANIFEST_HF_URI",
+  "FAP_ARTIFACT_EXPECTED_SOURCE_REF",
+  "FAP_ARTIFACT_MAX_BYTES",
+]
 
 seed_file = ""
 other_objects = []
-
 deviations = []

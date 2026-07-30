@@ -19,7 +19,7 @@ jobs:
   deploy:
     name: Deploy and verify runtime
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     environment: huggingface-space
     steps:
       - name: Check out exact deployment source
@@ -43,8 +43,17 @@ jobs:
           test -n "${HF_TOKEN:-}"
           [[ "$HF_SPACE_ID" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
 
-      - name: Install pinned Hugging Face SDK
-        run: python3 -m pip install --disable-pip-version-check --no-cache-dir 'huggingface_hub==1.5.0'
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.x'
+          package-manager-cache: false
+
+      - name: Install pinned Hugging Face tooling
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-cache-dir 'huggingface_hub==1.5.0' 'hf-transfer==0.1.9'
+          npm ci --no-audit --no-fund
 
       - name: Verify Hugging Face SDK readback contract
         env:
@@ -64,35 +73,83 @@ jobs:
           if (!Object.hasOwn(info, 'runtime')) throw new Error('Space runtime field is missing');
           NODE
 
-      - name: Export deterministic setup-mode Space repository
+      - name: Build production runtime
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          npm run build
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$(git rev-parse 'HEAD^{commit}')" = "$SOURCE_SHA"
+
+      - name: Package immutable artifact payload
+        id: package
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          out_dir="$RUNNER_TEMP/artifact"
+          node scripts/package-artifact.mjs --source-sha "$SOURCE_SHA" --slot edge --out "$out_dir" \
+            | tee "$RUNNER_TEMP/package-output.txt"
+          sha256="$(grep '^sha256=' "$RUNNER_TEMP/package-output.txt" | cut -d= -f2)"
+          bytes="$(grep '^bytes=' "$RUNNER_TEMP/package-output.txt" | cut -d= -f2)"
+          manifest_uri="$(grep '^manifest_uri=' "$RUNNER_TEMP/package-output.txt" | cut -d= -f2-)"
+          test -n "$sha256" && test -n "$bytes" && test -n "$manifest_uri"
+          printf 'sha256=%s\nbytes=%s\nmanifest_uri=%s\n' "$sha256" "$bytes" "$manifest_uri" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact payload to the private distribution bucket
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          namespace="${HF_SPACE_ID%%/*}"
+          key_prefix="feishu-agent-platform/edge/${SOURCE_SHA}"
+          out_dir="$RUNNER_TEMP/artifact"
+          export HF_HUB_ENABLE_HF_TRANSFER=1
+          hf buckets cp "$out_dir/payload.tar.gz" "hf://buckets/${namespace}/hfs-dist/${key_prefix}/payload.tar.gz"
+          hf buckets cp "$out_dir/manifest.json" "hf://buckets/${namespace}/hfs-dist/${key_prefix}/manifest.json"
+          node --input-type=module - "$out_dir/manifest.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (manifest.slot !== 'edge') throw new Error(`Unexpected artifact slot: ${manifest.slot}`);
+          NODE
+
+      - name: Export deterministic thin Space bundle
         id: export
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
         run: |
           set -euo pipefail
           export_dir="$RUNNER_TEMP/hf-export"
           source_time="$(git show -s --format=%cI "$SOURCE_SHA")"
           mkdir -p "$export_dir"
-          git archive --format=tar "$SOURCE_SHA" | tar -xf - -C "$export_dir"
+          git archive --format=tar "$SOURCE_SHA" hfs | tar -xf - -C "$export_dir" --strip-components=1
 
+          test -f "$export_dir/Dockerfile"
+          test -f "$export_dir/README.md"
+          test -f "$export_dir/docker/entrypoint.sh"
+          test -f "$export_dir/docker/artifact-bootstrap.mjs"
           test ! -e "$export_dir/.env"
           test ! -d "$export_dir/.git"
+          test ! -d "$export_dir/src"
+          test ! -d "$export_dir/test"
+          test ! -d "$export_dir/docs"
           test ! -d "$export_dir/local"
-          test ! -d "$export_dir/data"
-          if find "$export_dir/config" -type f \( -name '*.yaml' -o -name '*.yml' \) \
-            ! -name '*.yaml.example' ! -name '*.yml.example' -print -quit | grep -q .; then
-            echo 'The default Space export must remain in setup mode; active YAML manifests are forbidden.' >&2
-            exit 1
-          fi
+          test ! -d "$export_dir/config"
 
           SOURCE_REPOSITORY="$GITHUB_REPOSITORY" SOURCE_TIME="$source_time" \
             node --input-type=module <<'NODE'
           import { writeFileSync } from 'node:fs';
           const document = {
             schemaVersion: 1,
+            lane: 'artifact',
             sourceRepository: process.env.SOURCE_REPOSITORY,
             sourceSha: process.env.SOURCE_SHA,
             sourceCommitTime: process.env.SOURCE_TIME,
+            artifactManifest: process.env.MANIFEST_URI,
           };
           writeFileSync(
             `${process.env.RUNNER_TEMP}/hf-export/DEPLOYMENT_SOURCE.json`,
@@ -116,6 +173,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
           EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/deployment-evidence"
@@ -125,8 +183,10 @@ jobs:
           const directory = `${process.env.RUNNER_TEMP}/deployment-evidence`;
           const evidence = {
             schemaVersion: 1,
+            lane: 'artifact',
             status: 'pending',
             sourceSha: process.env.SOURCE_SHA,
+            artifactManifest: process.env.MANIFEST_URI,
             expectedHfRepositorySha: process.env.EXPECTED_HF_SHA,
             hfRepositorySha: null,
             hfRuntimeSha: null,
@@ -137,7 +197,7 @@ jobs:
           writeFileSync(`${directory}/deployment-evidence.json`, `${JSON.stringify(evidence, null, 2)}\n`);
           NODE
 
-      - name: Push deterministic source to Hugging Face over HTTPS
+      - name: Push deterministic bundle to Hugging Face over HTTPS
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
@@ -165,12 +225,30 @@ jobs:
           test "$remote_sha" = "$EXPECTED_HF_SHA"
           printf '%s\n' "$remote_sha" > "$RUNNER_TEMP/deployment-evidence/pushed-sha.txt"
 
+      - name: Pin Space artifact variables and restart runtime
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
+          PAYLOAD_BYTES: ${{ steps.package.outputs.bytes }}
+        run: |
+          set -euo pipefail
+          max_bytes=$((PAYLOAD_BYTES * 2))
+          if [ "$max_bytes" -lt 268435456 ]; then max_bytes=268435456; fi
+          hf spaces variables add "$HF_SPACE_ID" \
+            -e "FAP_ARTIFACT_MANIFEST_HF_URI=${MANIFEST_URI}" \
+            -e "FAP_ARTIFACT_EXPECTED_SOURCE_REF=${SOURCE_SHA}" \
+            -e "FAP_ARTIFACT_MAX_BYTES=${max_bytes}"
+          hf spaces restart "$HF_SPACE_ID"
+
       - name: Wait for exact Space runtime and verify public plane
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
           EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/deployment-evidence"
@@ -255,7 +333,7 @@ jobs:
           NODE
           grep -Eq 'Feishu Agent Platform|飞书' "$evidence_dir/admin.html"
 
-          SOURCE_SHA="$SOURCE_SHA" EXPECTED_HF_SHA="$EXPECTED_HF_SHA" \
+          SOURCE_SHA="$SOURCE_SHA" EXPECTED_HF_SHA="$EXPECTED_HF_SHA" MANIFEST_URI="$MANIFEST_URI" \
             HEALTH_STATUS="$health_status" READY_STATUS="$ready_status" ADMIN_STATUS="$admin_status" \
             node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
@@ -263,8 +341,10 @@ jobs:
           const state = JSON.parse(readFileSync(`${directory}/runtime-state-latest.json`, 'utf8'));
           const evidence = {
             schemaVersion: 1,
+            lane: 'artifact',
             status: 'verified',
             sourceSha: process.env.SOURCE_SHA,
+            artifactManifest: process.env.MANIFEST_URI,
             expectedHfRepositorySha: process.env.EXPECTED_HF_SHA,
             hfRepositorySha: process.env.EXPECTED_HF_SHA,
             hfRuntimeSha: state.runtimeSha,
@@ -284,6 +364,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
           EXPECTED_HF_SHA: ${{ steps.export.outputs.hf_sha }}
+          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/deployment-evidence"
@@ -315,8 +396,10 @@ jobs:
           const evidence = {
             ...previous,
             schemaVersion: 1,
+            lane: 'artifact',
             status: 'failed',
             sourceSha: process.env.SOURCE_SHA,
+            artifactManifest: process.env.MANIFEST_URI || previous.artifactManifest || null,
             expectedHfRepositorySha: process.env.EXPECTED_HF_SHA ||
               previous.expectedHfRepositorySha || null,
             hfRepositorySha: observedRepositorySha,
