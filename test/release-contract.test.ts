@@ -178,6 +178,9 @@ test('artifact packager ships the production runtime with config examples only',
   assert.match(packager, /manifest\.json/u);
   assert.match(packager, /active YAML manifests are forbidden/u);
   assert.match(packager, /patch-pi-brace-expansion\.mjs/u);
+  // 示例清单命名约定是 *.yaml.example（扩展名在后），匹配正则必须对齐该约定。
+  assert.match(packager, /\\\.ya\?ml\\\.example\$/u);
+  assert.doesNotMatch(packager, /\\\.example\\\.ya\?ml\$/u);
 });
 
 test('Pi nested brace-expansion is patched to the audited version', async () => {
