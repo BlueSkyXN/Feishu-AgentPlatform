@@ -8,7 +8,8 @@ FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production \
     NODE_OPTIONS=--enable-source-maps \
-    PATH=/opt/app/node_modules/.bin:$PATH \
+    FAP_ARTIFACT_INSTALL_ROOT=/opt/feishu-agent-platform/app \
+    PATH=/opt/feishu-agent-platform/app/node_modules/.bin:$PATH \
     PORT=7860 \
     PUBLIC_HTTP_HOST=0.0.0.0 \
     PUBLIC_HTTP_PORT=7860 \
@@ -19,13 +20,13 @@ ENV NODE_ENV=production \
     MODEL_PROVIDER_POLICY=host-broker-only \
     DATA_ROOT=/data/feishu-agent-platform \
     PLATFORM_DATABASE_PATH=/data/feishu-agent-platform/platform.db \
-    PLATFORM_CONFIG_ROOT=/opt/app/config
+    PLATFORM_CONFIG_ROOT=/opt/feishu-agent-platform/app/config
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -o node -g node -m 0700 /data /data/feishu-agent-platform \
-    && install -d -o node -g node -m 0755 /opt/app
+    && install -d -o node -g node -m 0755 /opt/feishu-agent-platform /opt/feishu-agent-platform/app
 
 COPY --chown=node:node docker/entrypoint.sh /usr/local/bin/fap-entrypoint.sh
 COPY --chown=node:node docker/artifact-bootstrap.mjs /usr/local/lib/fap-artifact-bootstrap.mjs

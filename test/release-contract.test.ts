@@ -164,17 +164,37 @@ test('HFS Space bundle is thin and bootstraps the artifact at startup', async ()
   assert.match(readme, /app_port:\s*7860/u);
   assert.match(dockerfile, /EXPOSE\s+7860/u);
   assert.match(dockerfile, /USER\s+node/u);
-  assert.match(dockerfile, /PATH=\/opt\/app\/node_modules\/\.bin:\$PATH/u);
+  assert.match(
+    dockerfile,
+    /FAP_ARTIFACT_INSTALL_ROOT=\/opt\/feishu-agent-platform\/app/u,
+  );
+  assert.match(
+    dockerfile,
+    /PATH=\/opt\/feishu-agent-platform\/app\/node_modules\/\.bin:\$PATH/u,
+  );
+  assert.match(
+    dockerfile,
+    /PLATFORM_CONFIG_ROOT=\/opt\/feishu-agent-platform\/app\/config/u,
+  );
+  assert.match(
+    dockerfile,
+    /install -d -o node -g node -m 0755 \/opt\/feishu-agent-platform \/opt\/feishu-agent-platform\/app/u,
+  );
   assert.doesNotMatch(dockerfile, /MODEL_BROKER_ENABLED=true/);
   assert.doesNotMatch(dockerfile, /COPY\s+.*dist|COPY\s+.*src/u);
   assert.match(entrypoint, /FAP_ARTIFACT_MANIFEST_HF_URI/u);
   assert.match(entrypoint, /FAP_ARTIFACT_BEARER_TOKEN/u);
   assert.match(entrypoint, /FAP_ARTIFACT_EXPECTED_SOURCE_REF/u);
+  assert.match(entrypoint, /cd "\$install_root"/u);
   assert.match(entrypoint, /fap-artifact-bootstrap\.mjs/u);
   assert.match(entrypoint, /exec node dist\/index\.js/u);
   assert.match(bootstrap, /sha256/u);
   assert.match(bootstrap, /payload\.tar\.gz/u);
   assert.match(bootstrap, /hfs-dist/u);
+  assert.match(
+    bootstrap,
+    /FAP_ARTIFACT_INSTALL_ROOT \?\? '\/opt\/feishu-agent-platform\/app'/u,
+  );
 });
 
 test('artifact packager ships the production runtime with config examples only', async () => {

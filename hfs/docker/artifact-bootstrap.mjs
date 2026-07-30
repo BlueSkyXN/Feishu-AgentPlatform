@@ -233,7 +233,7 @@ async function main() {
   const manifestUriValue = process.env.FAP_ARTIFACT_MANIFEST_HF_URI;
   const bearerToken = process.env.FAP_ARTIFACT_BEARER_TOKEN;
   const expectedSourceRef = process.env.FAP_ARTIFACT_EXPECTED_SOURCE_REF ?? '';
-  const installRoot = process.env.FAP_ARTIFACT_INSTALL_ROOT ?? '/opt/app';
+  const installRoot = process.env.FAP_ARTIFACT_INSTALL_ROOT ?? '/opt/feishu-agent-platform/app';
   const maxBytes = Number.parseInt(process.env.FAP_ARTIFACT_MAX_BYTES ?? '2147483648', 10);
   if (!manifestUriValue) throw new ContractError('FAP_ARTIFACT_MANIFEST_HF_URI is required.');
   if (!bearerToken || /\s/u.test(bearerToken)) {
