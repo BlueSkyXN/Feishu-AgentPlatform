@@ -109,18 +109,23 @@ test('CI/CD verifies one immutable source before invoking HF and GHCR publishers
 });
 
 test('HF deployment preserves setup mode and verifies the exact remote runtime', async () => {
-  const workflow = await source('.github/workflows/hf-space.yml');
+  const [workflow, settings] = await Promise.all([
+    source('.github/workflows/hf-space.yml'),
+    source('scripts/hf-space-settings.py'),
+  ]);
   assert.doesNotMatch(workflow, /cp\s+"\$example"/);
   assert.match(workflow, /package-artifact\.mjs --source-sha/);
   assert.match(workflow, /hf buckets cp/);
   assert.match(workflow, /hfs-dist/);
   assert.match(workflow, /git archive --format=tar "\$SOURCE_SHA" hfs/);
   assert.match(workflow, /DEPLOYMENT_SOURCE\.json/);
-  assert.match(workflow, /hf spaces variables add/);
+  assert.match(workflow, /python3 scripts\/hf-space-settings\.py/);
+  assert.doesNotMatch(workflow, /hf spaces variables add/);
   assert.match(workflow, /FAP_ARTIFACT_MANIFEST_HF_URI/);
   assert.match(workflow, /FAP_ARTIFACT_EXPECTED_SOURCE_REF/);
   assert.match(workflow, /FAP_ARTIFACT_MAX_BYTES/);
-  assert.match(workflow, /hf spaces restart/);
+  assert.doesNotMatch(workflow, /hf spaces restart/);
+  assert.match(settings, /api\.restart_space\(space_id\)/);
   assert.match(workflow, /python3 scripts\/hf-space-info\.py/);
   assert.match(workflow, /Hugging Face SDK readback contract/);
   assert.doesNotMatch(workflow, /hf spaces info|--json/);

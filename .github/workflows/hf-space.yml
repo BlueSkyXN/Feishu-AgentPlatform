@@ -229,18 +229,15 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
-          MANIFEST_URI: ${{ steps.package.outputs.manifest_uri }}
           PAYLOAD_BYTES: ${{ steps.package.outputs.bytes }}
+          FAP_ARTIFACT_MANIFEST_HF_URI: ${{ steps.package.outputs.manifest_uri }}
+          FAP_ARTIFACT_EXPECTED_SOURCE_REF: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           max_bytes=$((PAYLOAD_BYTES * 2))
           if [ "$max_bytes" -lt 268435456 ]; then max_bytes=268435456; fi
-          hf spaces variables add "$HF_SPACE_ID" \
-            -e "FAP_ARTIFACT_MANIFEST_HF_URI=${MANIFEST_URI}" \
-            -e "FAP_ARTIFACT_EXPECTED_SOURCE_REF=${SOURCE_SHA}" \
-            -e "FAP_ARTIFACT_MAX_BYTES=${max_bytes}"
-          hf spaces restart "$HF_SPACE_ID"
+          export FAP_ARTIFACT_MAX_BYTES="$max_bytes"
+          python3 scripts/hf-space-settings.py
 
       - name: Wait for exact Space runtime and verify public plane
         env:
