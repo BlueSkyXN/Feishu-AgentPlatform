@@ -56,14 +56,12 @@ Workspace 总量是 Host 受控写入口的应用层限制，不是 filesystem q
 
 Rollback 会创建并发布新的 revision，不会抹掉历史。Publish/Rollback 返回 `runtime_apply_failed` 时，数据库 active revision 已切换但运行时应用失败，并已记录 `config.runtime_apply_failed`；应先读回 config/audit，再决定修正或再次回滚。实际 reload/restart 方式和业务 smoke 必须另行记录。
 
-## 工具审批
+## V0.1 飞书只读策略
 
 - 读取操作固定 `approval=never`；
-- 写操作要求 `requester` 或 `admin`；
-- 高风险删除只允许 `admin`，且操作人必须在 `ADMIN_OPEN_IDS`；
-- 待审批只保存在进程内，受 `TOOL_APPROVAL_TTL_MS` 限制，重启会取消；
-- 验收批准、拒绝、过期、重复点击、非审批人点击和参数哈希；
-- 卡片审批只证明授权决策，仍需记录工具执行结果和外部系统实际变更。
+- typed Feishu write tool、`lark-cli effect=write` 与 `high-risk-write` 均在配置加载时拒绝；
+- `workspace.write` 仅修改当前 Conversation Workspace，仍受 mode、路径、symlink 和配额限制；
+- 审批记录和管理页面仅为历史/未来兼容保留，V0.1 不应产生外部写审批。
 
 ## ConversationSession 生命周期
 

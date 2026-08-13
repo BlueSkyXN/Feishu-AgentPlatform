@@ -137,7 +137,7 @@ version_source=commit
 2. WS 重连与重复事件；
 3. HTTP challenge、event 和卡片 callback；
 4. default、命令与 allowlist Binding；
-5. 当前用户资料、聊天历史、只读工具，以及受控写操作的 requester/admin 审批、拒绝和过期；
+5. 当前用户资料、聊天历史、只读工具，以及飞书写能力无法发布的负向校验；
 6. Worker 经 Model Broker 完成 Cloudflare 流式调用；
 7. 同一 Agent 跨 App 复用且凭据、Session、Workspace 不串用；
 8. lockfile 固定的 `@larksuite/cli@1.0.79` bot profile、固定 operation/flags 和实际飞书 scope；

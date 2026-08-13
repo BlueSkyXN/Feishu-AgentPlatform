@@ -104,16 +104,9 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   http://127.0.0.1:8788/api/v1/status
 ```
 
-## 4. 工具和审批检查
+## 4. 只读工具检查
 
-`lark-cli@1.0.79` 的 Host profile 会使用 App 凭据初始化为 strict bot/default bot。`AgentDefinition.larkCli.operations` 为每个 operation 固定 command、flags、effect 和 approval；读取为 `approval: never`，写入至少 `requester`，高风险删除必须 `admin`。
-
-需要 requester/admin 审批的 Binding 必须启用 HTTP card callbacks。管理员审批还必须配置：
-
-```dotenv
-ADMIN_OPEN_IDS=ou_admin_a,ou_admin_b
-TOOL_APPROVAL_TTL_MS=300000
-```
+`lark-cli@1.0.79` 的 Host profile 会使用 App 凭据初始化为 strict bot/default bot。V0.1 中每个 `AgentDefinition.larkCli.operations` 必须固定为只读 command、`effect: read` 和 `approval: never`；服务端拒绝 typed Feishu write tool 和非只读 CLI operation。
 
 ## 5. 真实飞书验收
 
@@ -122,7 +115,7 @@ TOOL_APPROVAL_TTL_MS=300000
 3. 在 primary App 发送 `/office 查询今天日程`；
 4. 验证不同话题、App、Agent 的 Session 不混用；
 5. 验证 `/status`、`/reset`、`/abort`；
-6. 对测试写操作分别验证批准、拒绝、过期、非审批人点击和 admin allowlist；
+6. 验证 typed Feishu write tool 和非只读 `lark-cli` operation 无法通过配置校验；
 7. 验证 WorkspaceGuard 只接受相对路径且没有 Shell/exec；
 8. 重启后回读 `/data/feishu-agent-platform/platform.db`、active revision、Vault fingerprint、Session 和 Workspace。
 
@@ -130,4 +123,4 @@ TOOL_APPROVAL_TTL_MS=300000
 
 ## 6. HF Space 配置边界
 
-GitHub HF workflow 通过 `git archive` 导出 exact-head source，但保持 `config/{apps,agents,bindings}/*.yaml.example` 为示例，不生成 active YAML。空数据库从 Space HTTPS 域名的 `/admin` 完成首次配置；持久存储必须覆盖 `/data`，应用数据位于 `/data/feishu-agent-platform`，其中 SQLite 固定为 `/data/feishu-agent-platform/platform.db`。
+GitHub HF workflow 在 exact-head source 上构建 artifact payload，并只通过 `git archive` 导出瘦 `hfs/` wrapper；它保持 `config/{apps,agents,bindings}/*.yaml.example` 为示例，不生成 active YAML。空数据库从 Space HTTPS 域名的 `/admin` 完成首次配置；持久存储必须覆盖 `/data`，应用数据位于 `/data/feishu-agent-platform`，其中 SQLite 固定为 `/data/feishu-agent-platform/platform.db`。

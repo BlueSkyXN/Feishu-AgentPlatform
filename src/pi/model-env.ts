@@ -39,6 +39,8 @@ export function buildAgentWorkerEnvironment(
     TEMP: temporaryDirectory,
     NO_COLOR: '1',
     PI_AGENT_ISOLATED: '1',
+    PI_OFFLINE: '1',
+    PI_TELEMETRY: '0',
   };
   for (const name of COMMON_ENV) copyNonSecret(name, env);
   return env;
@@ -56,6 +58,8 @@ export function exposedWorkerEnvironmentNames(
     'TEMP',
     'NO_COLOR',
     'PI_AGENT_ISOLATED',
+    'PI_OFFLINE',
+    'PI_TELEMETRY',
   ];
 }
 

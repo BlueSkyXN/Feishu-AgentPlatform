@@ -20,7 +20,7 @@ Prompt 与 Skill 只提供操作说明，不授予权限。实际权限由 App s
 - `approval.instance.get`：按 `instance_id` 调用 `/approval/v4/instances/:instance_id`；
 - `approval.instance.detail`：按 `instance_code` 调用 `/approval/v4/instances/detail`，必须使用 `identity=user`。
 
-写能力按资源显式拆分：
+代码中保留以下写能力协议，供历史数据读取和未来版本兼容，但 V0.1 配置加载器禁止把它们发布给 Agent：
 
 ```text
 doc.create
@@ -38,9 +38,9 @@ approval.instance.create
 
 `identity` 是 Host 配置，不是模型参数；模型看到的 typed tool schema 不包含该字段。即使旧客户端额外提交 `identity`，也不能覆盖 Host grant。`approval.instance.detail` 与 `approval.instance.create` 必须显式使用用户身份和 OAuth。
 
-约束是强制的：读取必须 `never`，普通外部写入至少 `requester`，删除等高风险操作必须 `admin`。`ADMIN_OPEN_IDS` 为空时 admin 操作直接拒绝。需要审批的 Binding 必须启用 HTTP card callbacks。
+V0.1 约束是强制的：所有已发布的飞书工具和 `lark-cli` operation 必须为 `read + never`。typed Feishu write tool、`effect=write` 和 `effect=high-risk-write` 均在统一配置加载边界拒绝。
 
-飞书卡片只允许正确 operator 决策：`requester` 由原消息发送者批准，`admin` 由 allowlist 管理员批准。审批带一次性随机 ID、参数 hash 和 TTL；批准只授权本次固定参数调用，不等于外部系统已经写入成功。
+审批 coordinator/store 与管理页面仍保留为 dormant 兼容面，但当前严格只读配置不会产生外部写审批。
 
 ## lark-cli bot profile
 
@@ -80,21 +80,13 @@ larkCli:
         --start: {type: string, maxBytes: 64}
         --end: {type: string, maxBytes: 64}
       requiredFlags: []
-    - id: create-document
-      command: [docs, +create]
-      effect: write
-      approval: requester
-      allowedFlags:
-        --title: {type: string, required: true, maxBytes: 800}
-        --content: {type: content-file, required: true, maxBytes: 2000000}
-      requiredFlags: [--title, --content]
 ```
 
 Host 拒绝 operation 未声明的 flag，以及 `--as`、`--yes`、`--format`、profile/auth/config、身份与 Secret 参数。`content-file` 只在本次请求私有临时目录生成，不能引用 Host 任意路径。所有进程使用 `shell: false`、最小环境、超时和输出上限；stdout/stderr/JSON 再经过凭据脱敏。
 
 旧 `allowedCommands` 已明确拒绝，不存在兼容执行路径；配置必须迁移为结构化 `operations`。
 
-命令是否真实存在、所需 scope、bot identity 行为、审批卡片和输出 shape 必须在固定 `1.0.79` 与测试飞书 App 上实际验收；本地配置校验不证明外部调用成功。
+命令是否真实存在、所需 scope、bot identity 行为和输出 shape 必须在固定 `1.0.79` 与测试飞书 App 上实际验收；本地配置校验不证明外部调用成功。
 
 ## Skills
 

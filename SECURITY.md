@@ -15,6 +15,8 @@
 
 Pi Worker 是进程隔离，不是 VM。WorkspaceGuard 是文件路径与读写边界，不是原生代码 Sandbox。
 
+共享 Pi SDK session core 强制 `PI_OFFLINE=1` 与 `PI_TELEMETRY=0`，process Worker 子进程环境也固定相同值；同时关闭 install telemetry/provider attribution 与 create-time model catalog network refresh。Pi 不执行自身的启动网络检查或安装遥测，业务模型请求仍只通过 loopback Host Model Broker。
+
 ## 模型凭据
 
 Pi Worker 的环境变量不复制任何模型、飞书、OAuth 或管理凭据。Worker 通过 IPC 获得 Host Model Broker 的随机 capability；Broker 验证后删除 Worker 的 `Authorization`，再以 `cf-aig-authorization` 调用 Cloudflare。
@@ -23,12 +25,12 @@ Pi Worker 的环境变量不复制任何模型、飞书、OAuth 或管理凭据�
 
 ## 飞书工具与 lark-cli
 
-- 默认 example 只启用有限读取能力；写工具必须在 AgentDefinition 中显式启用并配置 grant。
+- V0.1 对飞书业务数据严格只读；AgentDefinition 中出现 typed Feishu write tool 或非只读 `lark-cli` operation 时，统一配置加载器直接拒绝。
 - `openapi.get` 只允许 `GET` 和 AgentDefinition 明确配置的路径前缀。
 - `larkcli.run` 使用 operation ID 映射到固定 command 和 flag schema；模型不能传任意子命令。
 - `allowCrossChatRead=false` 时，通用 IM OpenAPI 被禁用，`lark-cli` IM 参数必须属于当前 chat/thread/message。
 - typed tool 的 `identity` 只由 Host grant 决定，不接受模型覆盖；Approval 的 `instance_id` 与 user-only `instance_code` endpoint 分开建模。
-- 读取 operation 固定 `approval=never`；写入必须 `requester/admin`，高风险删除必须 `admin`，审批通过飞书卡片一次性完成并受 TTL、operator 和参数哈希约束。
+- 读取 operation 固定 `approval=never`；审批存储与旧写操作协议仅为历史/未来兼容保留，不构成 V0.1 可发布能力。
 - Agent 不能提供身份、App Secret、Token、Profile、通用 API method 或任意子命令。
 - `@larksuite/cli@1.0.79` 是由 `package-lock.json` 固定的 production dependency；Host 从项目 `node_modules/.bin` 启动并使用 `spawn(..., { shell: false })`，仅给子进程最小环境和当前 App 凭据；每个 App 使用独立 CLI HOME，自动 `config init --app-secret-stdin`、strict bot/default bot，不继承宿主用户配置。
 - App 凭据与 CLI 输出都会经过脱敏边界；仍不得把原始 CLI debug 日志公开。
@@ -83,11 +85,11 @@ Pi Worker 的环境变量不复制任何模型、飞书、OAuth 或管理凭据�
 - 配置错误导致 Agent 路由歧义或飞书权限过大；
 - Cloudflare capability、Gateway Token 或 OAuth Token 泄漏；
 - SQLite 文件、Vault master key 或管理员 session 泄漏，以及错误备份导致 WAL/主库不一致；
-- 审批卡片误配置、`ADMIN_OPEN_IDS` 过宽或外部写操作缺少二次业务校验；
+- 历史配置、未来版本或错误绕过只读门禁后触达 dormant 写实现；
 - Workspace 累计限制属于 Host 应用层配额，不是跨进程 filesystem quota；多 Host 共享同一数据根时仍需要可靠的单写者约束或底层磁盘配额；
 - HF Space 平台、持久卷和网络策略变化。
 
-Pi 0.82.1 自带 `npm-shrinkwrap.json`，上游嵌套的 `brace-expansion` 版本不会被 npm root override 直接替换。本仓库固定 `5.0.8`，并在 `postinstall` 后覆盖嵌套副本、同步 lockfile 记录并由测试回读。不得使用 `npm ci --ignore-scripts`；升级 Pi 后应优先删除这一临时补丁，但删除前必须确认上游嵌套版本已修复。
+Pi SDK 固定为 `0.84.1`，锁文件回读其上游依赖树中的 `undici@8.9.0` 与 `brace-expansion@5.0.9`。项目不再通过根 `postinstall` 修改第三方包或锁文件；依赖升级必须重新运行 production `npm audit` 和完整兼容性检查。
 
 上线前必须在目标环境验证飞书权限、WS/HTTP 回调、模型流式响应、持久化恢复和资源压力。
 

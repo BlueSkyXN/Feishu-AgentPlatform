@@ -27,6 +27,8 @@ test('Pi worker environment receives no Host, Feishu, provider, OAuth, or Cloudf
       'ADMIN_TOKEN', 'OPENAI_API_KEY', 'OAUTH_TOKEN_ENCRYPTION_KEY',
     ]) assert.equal(env[name], undefined, `${name} leaked into worker`);
     assert.equal(env.HOME, '/isolated/home');
+    assert.equal(env.PI_OFFLINE, '1');
+    assert.equal(env.PI_TELEMETRY, '0');
   } finally {
     process.env = snapshot;
   }

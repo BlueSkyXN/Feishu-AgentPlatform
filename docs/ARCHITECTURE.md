@@ -98,7 +98,7 @@ Pi custom tool
   -> SDK / lark-cli / WorkspaceGuard
 ```
 
-飞书/OAuth 凭据只存在 Host。`@larksuite/cli@1.0.79` 作为 lockfile 固定的 production dependency 在 Host 使用每 App 独立 strict bot profile；外部写操作先经过 requester/admin 卡片审批。
+飞书/OAuth 凭据只存在 Host。`@larksuite/cli@1.0.79` 作为 lockfile 固定的 production dependency 在 Host 使用每 App 独立 strict bot profile；V0.1 的统一配置加载器只允许飞书只读工具与 CLI operation。
 
 飞书图片/文件由 Host Lark Channel 以 bounded stream 下载。Header 超限先拒绝，实际 stream 逐 chunk 计数并在超过本项/本 Turn 剩余预算时销毁；只有完整资源才计入 total，并以安全相对路径写入当前 Conversation Workspace。
 

@@ -91,7 +91,7 @@ GET  /api/admin/v1/diagnostics/lark-cli
 GET  /api/admin/v1/audit
 ```
 
-Draft 实体 mutation 应提交 `expectedDraftRevisionId`。永久删除实体必须提交完整实体 ID，永久清理会话必须提交完整 `storageId`。已删除 Agent 的 orphan Session 仍可由同一端点清理，但服务端继续执行 `DATA_ROOT` containment 和 Session 路径匹配。管理台审批端点仅处理 `approval=admin`；requester approval 仍由飞书卡片 operator 校验。
+Draft 实体 mutation 应提交 `expectedDraftRevisionId`。永久删除实体必须提交完整实体 ID，永久清理会话必须提交完整 `storageId`。已删除 Agent 的 orphan Session 仍可由同一端点清理，但服务端继续执行 `DATA_ROOT` containment 和 Session 路径匹配。审批端点为历史/未来兼容保留；V0.1 严格只读配置不产生新的外部写审批。
 
 `GET /api/admin/v1/diagnostics/lark-cli` 的 `approvalCallbackConfigured` 只表示配置启用了 HTTP callback；`approvalCallbackReady` 才表示对应 App runtime callback 可用，两者不能互相替代。
 

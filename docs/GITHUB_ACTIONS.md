@@ -15,7 +15,8 @@ Pull Request
 main push
   → 同一个 exact-head quality gate
   → HF_AUTO_DEPLOY=true 时调用 HF deploy
-      ├── git archive 同一 GitHub SHA
+      ├── 构建并上传同一 GitHub SHA 的私有 artifact payload
+      ├── git archive 仅导出瘦 hfs/ wrapper
       ├── 保持空库 setup mode，不生成 active YAML
       ├── 生成 DEPLOYMENT_SOURCE.json
       ├── HTTPS 推送 Space
@@ -39,9 +40,10 @@ Tag v*.*.*
 | `container.yml` | `workflow_call` | 发布已经通过 gate 的 exact-head GHCR 镜像 |
 | `release.yml` | Tag、手动 | 验证 Tag SHA、生成远端 Release 资产，可选发布 Tag 镜像 |
 | `codeql.yml` | PR、main、定时、手动 | JavaScript/TypeScript CodeQL |
-| `dependency-review.yml` | PR | 依赖变化审查 |
+| `dependency-review.yml` | PR | 使用 Dependency Review 审查 PR 相对 base 的依赖变化 |
+| `dependency-audit.yml` | 每周、手动 | 干净安装当前锁定的 production dependency 后运行 `npm audit`，发现无代码变更期间新披露的公告 |
 
-`quality-gate.yml` 固定使用 `npm ci`。`package-lock.json` 必须和依赖变更一起提交；正式测试、构建和 Docker smoke 以 GitHub Actions run 为准。
+`quality-gate.yml` 固定使用 `npm ci`，并通过 `npm run check` 对每个 exact-head 运行 production `npm audit`。`dependency-review.yml` 只检查 PR dependency delta，`dependency-audit.yml` 负责定时/手动执行干净 production install 并审计当前锁文件。`package-lock.json` 必须和依赖变更一起提交；正式测试、构建和 Docker smoke 以 GitHub Actions run 为准。
 
 ## GitHub 设置
 
@@ -83,9 +85,10 @@ CD 默认只部署 `*.yaml.example`，绝不把示例复制成 active `*.yaml`�
 
 HF Space 使用独立 Git 仓库，因此 GitHub source SHA 与 HF repository SHA 不相同。部署流程通过三层绑定：
 
-1. `git archive` 只导出 gate 验证过的 GitHub `source_sha`；
-2. Space 根目录生成 `DEPLOYMENT_SOURCE.json`，记录 GitHub repository、source SHA 和 source commit time；
-3. Action artifact `hf-deployment-<source_sha>` 记录 GitHub SHA、HF repo SHA、HF runtime SHA 和 HTTP smoke。
+1. artifact packager 只处理 gate 验证过的 GitHub `source_sha`，manifest 固定 source ref、payload SHA-256 和 bytes；
+2. `git archive` 只导出同一 SHA 的瘦 `hfs/` wrapper，不把产品源码、测试或文档推入 Space Git；
+3. Space 根目录生成 `DEPLOYMENT_SOURCE.json`，记录 GitHub repository、source SHA、artifact manifest 和 source commit time；
+4. Action artifact `hf-deployment-<source_sha>` 记录 GitHub SHA、HF repo SHA、HF runtime SHA 和 HTTP smoke。
 
 HF 导出 commit 使用源 Commit 时间和固定 bot identity；同一 source SHA 的导出树相同时，重复部署产生相同 HF SHA。
 
@@ -119,20 +122,14 @@ workflow 会先把 ref 解析为 immutable SHA，再执行完整 gate。回滚�
 
 ## 分支保护
 
-`main` 至少要求：
+当前 GitHub 仓库未启用 `main` branch protection 或 repository ruleset，具有写权限的账号可以直接更新 `main`。Actions 仍会按事件触发，但不再作为更新分支前的强制门禁。
 
-- exact-head Node 22.19 source gate；
-- exact-head Node 24 source gate；
-- production image integration；
-- CodeQL；
-- 禁止 force push 和删除分支。
-
-required check 名称应在首次真实 run 后从 GitHub 回读再配置，不能凭 workflow 文件猜测。
+若后续重新启用保护，应先从真实 Actions run 回读 required check 名称，再按需要配置 exact-head Node 22.19、Node 24、production image integration 和 CodeQL；不能凭 workflow 文件猜测名称。
 
 ## 证据边界
 
 - GitHub source gate：证明该 Commit 的源码检查、测试和构建通过；
 - production image smoke：证明镜像可构建并能以非 root setup mode 启动；
 - HF deployment evidence：证明同一导出树构建并运行；
-- `ready`：证明 App/Broker 在该进程启动，不证明真实飞书事件、模型、OAuth 或审批写操作；
+- `ready`：证明 App/Broker 在该进程启动，不证明真实飞书事件、模型、OAuth 或只读工具调用；
 - 真实业务验收与持久卷重启恢复仍需按[部署检查表](DEPLOYMENT_CHECKLIST.md)执行。

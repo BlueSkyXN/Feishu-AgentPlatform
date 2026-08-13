@@ -15,7 +15,7 @@
 npm ci --no-audit --no-fund
 ```
 
-依赖升级后必须同步更新 `package-lock.json`。`@larksuite/cli@1.0.79` 也是 exact production dependency，由同一 lockfile 固定并从项目 `node_modules/.bin` 启动，不依赖全局安装。不要加 `--ignore-scripts`：根项目 `postinstall` 需要将已审计的 `brace-expansion@5.0.8` 同步到 Pi 0.82.1 的 shrinkwrap 嵌套依赖，并会校验实际安装版本。
+依赖升级后必须同步更新 `package-lock.json`。Pi SDK 固定为 `0.84.1`，其上游依赖树已包含修复后的 `undici@8.9.0` 与 `brace-expansion@5.0.9`，不再使用本地 `postinstall` 补丁。`@larksuite/cli@1.0.79` 也是 exact production dependency，由同一 lockfile 固定并从项目 `node_modules/.bin` 启动，不依赖全局安装。
 
 ## 本地配置
 

@@ -63,6 +63,6 @@ docker compose up -d
 
 ## CI/CD
 
-`ci.yml` 是唯一主编排：先解析 immutable SHA，再调用一次 `quality-gate.yml` 验证 npm 锁文件、仓库与文档策略、TypeScript、测试、构建、HF/release preflight、最终镜像和 setup-mode HTTP smoke。Gate 通过后才调用 HF 或 GHCR reusable workflow。HF job 还必须等待 repo/runtime SHA 一致并完成 HTTP smoke。Gate 或 HF 成功仍不能替代真实飞书、Cloudflare、OAuth、审批卡片和持久化恢复验收。
+`ci.yml` 是唯一主编排：先解析 immutable SHA，再调用一次 `quality-gate.yml` 验证 npm 锁文件、production dependency audit、仓库与文档策略、TypeScript、测试、构建、HF/release preflight、最终镜像和 setup-mode HTTP smoke。Gate 通过后才调用 HF 或 GHCR reusable workflow。HF job 还必须等待 repo/runtime SHA 一致并完成 HTTP smoke。Gate 或 HF 成功仍不能替代真实飞书、Cloudflare、OAuth、只读工具和持久化恢复验收。
 
 上线使用 [部署检查表](DEPLOYMENT_CHECKLIST.md)，记录 Commit、镜像 digest、配置变更、数据备份和回滚点。

@@ -16,16 +16,23 @@ for (const path of [
 
 const pkg = JSON.parse(await text('package.json'));
 const lock = JSON.parse(await text('package-lock.json'));
-if (pkg.dependencies?.['brace-expansion'] !== '5.0.8') {
-  failures.push('The Pi brace-expansion security override must remain pinned to 5.0.8.');
+if (pkg.scripts?.postinstall !== undefined) {
+  failures.push('Dependency security fixes must not rely on a root postinstall patch.');
 }
-if (pkg.scripts?.postinstall !== 'node scripts/patch-pi-brace-expansion.mjs') {
-  failures.push('The Pi dependency patch must run after every install.');
+if (pkg.dependencies?.['@earendil-works/pi-ai'] !== '0.84.1') {
+  failures.push('Pi AI must remain pinned to the audited 0.84.1 release.');
 }
-if (
-  lock.packages?.['node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion']?.version !== '5.0.8'
-) {
-  failures.push('package-lock.json must record the patched Pi brace-expansion version.');
+if (pkg.dependencies?.['@earendil-works/pi-coding-agent'] !== '0.84.1') {
+  failures.push('Pi coding agent must remain pinned to the audited 0.84.1 release.');
+}
+const piBraceExpansion =
+  lock.packages?.['node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion'];
+if (piBraceExpansion?.version !== '5.0.9') {
+  failures.push('package-lock.json must resolve the Pi brace-expansion dependency to 5.0.9.');
+}
+const piUndici = lock.packages?.['node_modules/@earendil-works/pi-coding-agent/node_modules/undici'];
+if (piUndici?.version !== '8.9.0') {
+  failures.push('package-lock.json must resolve the Pi undici dependency to 8.9.0.');
 }
 const dependencies = {
   ...(pkg.dependencies ?? {}),
@@ -57,6 +64,14 @@ requirePattern(larkCli, /XDG_CONFIG_HOME/, 'lark-cli must use an isolated config
 requirePattern(larkCli, /XDG_CACHE_HOME/, 'lark-cli must use an isolated cache directory.');
 const modelEnv = await text('src/pi/model-env.ts');
 reject(modelEnv, /copyNonSecret\(['"](?:CLOUDFLARE|OPENAI|ANTHROPIC|FEISHU)/, 'Pi worker environment must not copy credentials.');
+requirePattern(modelEnv, /PI_OFFLINE:\s*['"]1['"]/, 'Pi worker must disable Pi startup network operations.');
+requirePattern(modelEnv, /PI_TELEMETRY:\s*['"]0['"]/, 'Pi worker must disable Pi install telemetry.');
+const sessionCore = await text('src/pi/session-core.ts');
+requirePattern(sessionCore, /process\.env\.PI_OFFLINE\s*=\s*['"]1['"]/, 'Pi SDK sessions must enforce offline mode even in process.');
+requirePattern(sessionCore, /process\.env\.PI_TELEMETRY\s*=\s*['"]0['"]/, 'Pi SDK sessions must override Host telemetry opt-in.');
+requirePattern(sessionCore, /enableInstallTelemetry:\s*false/, 'Pi SDK sessions must disable install telemetry and provider attribution.');
+requirePattern(sessionCore, /allowModelNetwork:\s*false/, 'Pi SDK sessions must not allow create-time model catalog network access.');
+requirePattern(sessionCore, /refreshOnCreate:\s*false/, 'Pi SDK sessions must skip create-time model catalog refresh.');
 const modelBroker = await text('src/model/model-broker.ts');
 requirePattern(modelBroker, /cf-aig-authorization/, 'Host Model Broker must inject Cloudflare authentication.');
 requirePattern(modelBroker, /capabilities\.get/, 'Host Model Broker must authenticate worker capabilities.');

@@ -7,13 +7,13 @@
 项目 Space：
 
 ```text
-https://huggingface.co/spaces/BlueSkyXN/Feishu-AgentPlatform
+https://huggingface.co/spaces/BlueSkyXN/feishu-agent-platform-hfs
 ```
 
 管理台：
 
 ```text
-https://blueskyxn-feishu-agentplatform.hf.space/admin
+https://blueskyxn-feishu-agent-platform-hfs.hf.space/admin
 ```
 
 Space 为 private 时，先登录具有访问权限的 Hugging Face 账号。管理台再使用部署时配置的 `ADMIN_TOKEN` 登录；Token 不写入文档、URL 或浏览器截图。
@@ -50,8 +50,8 @@ GET /admin   → 200
 | Credentials | Vault status/fingerprint | 是 | 有效性验证需要 |
 | Revisions / Audit | SQLite config/audit | 是 | 无 |
 | Sessions | Session index 与 runtime | 空状态 | 对话、abort/reset 恢复需要 |
-| Approvals | Approval store | 空状态 | 飞书卡片 requester/admin 操作需要 |
-| `lark-cli` Diagnostics | 配置、版本、profile runtime | 静态诊断 | 真实 read/write scope 需要 |
+| Approvals | Approval store | 历史/未来兼容空状态 | V0.1 不产生外部写审批 |
+| `lark-cli` Diagnostics | 配置、版本、profile runtime | 静态诊断 | 真实只读 scope 需要 |
 
 管理台中的按钮均连接真实 API；setup mode 出现空状态不代表业务闭环已经执行。
 
@@ -78,13 +78,13 @@ Feishu App B
 - HTTP challenge、加密 Event 和 Card Callback；
 - 用户 OAuth、Token refresh 和用户身份 typed tool；
 - Cloudflare AI Gateway 的 OpenAI Responses 与 Anthropic 流式调用；
-- `lark-cli` read、requester-approved write、admin-approved high-risk write；
+- `lark-cli` 只读 operation 及其真实飞书 scope；
 - 多 App 复用 Agent 时的凭据、Session、Workspace 隔离；
 - 附件下载、多模态图片和 Workspace 相对路径；
 - 10,000 持久会话索引、16 并发 Turn 和 Worker LRU；
 - `/data` 持久卷重启恢复、Secret 轮换和配置回滚。
 
-对应步骤见[部署检查表](DEPLOYMENT_CHECKLIST.md)。写操作只使用专用测试资源，执行前确认，结束后回读并清理。
+对应步骤见[部署检查表](DEPLOYMENT_CHECKLIST.md)。V0.1 的负向验收还必须证明飞书写能力无法被配置和发布。
 
 ## 部署来源确认
 

@@ -219,7 +219,7 @@
               <div><p class="section-kicker">工具审批</p><h2 id="approvals-title">Approvals</h2></div>
               <button class="button ghost" type="button" data-refresh="approvals">刷新</button>
             </div>
-            <div class="capability-note"><strong>处置边界：</strong>管理台只可处理 <code>approval=admin</code> 的 pending 审批；<code>approval=requester</code> 仍必须由原请求者在飞书中完成。</div>
+            <div class="capability-note"><strong>V0.1 边界：</strong>飞书业务能力严格只读；此页只保留历史/未来兼容的审批记录，不应出现新的外部写审批。</div>
             <form id="approval-filter-form" class="filter-bar compact">
               <label for="approval-state-filter">状态<select id="approval-state-filter"><option value="">全部</option><option value="pending">pending</option><option value="approved">approved</option><option value="denied">denied</option><option value="expired">expired</option><option value="aborted">aborted</option></select></label>
               <button class="button secondary" type="submit">应用筛选</button>
@@ -230,12 +230,12 @@
 
           <article data-panel="diagnostics" aria-labelledby="diagnostics-title" hidden>
             <div class="section-heading">
-              <div><p class="section-kicker">Profile · Version · Read / Write</p><h2 id="diagnostics-title">lark-cli 诊断</h2></div>
+              <div><p class="section-kicker">Profile · Version · Read-only</p><h2 id="diagnostics-title">lark-cli 诊断</h2></div>
               <button class="button ghost" type="button" data-refresh="diagnostics">刷新</button>
             </div>
-            <div class="capability-note"><strong>证据范围：</strong>这里读取后端运行时快照，展示 profile 初始化、版本匹配和绑定就绪状态。后端未提供从管理台触发真实读写 smoke 的接口，因此“读写就绪”不等于已执行外部写入验收。</div>
+            <div class="capability-note"><strong>证据范围：</strong>这里读取后端运行时快照，展示 profile 初始化、版本匹配和绑定就绪状态。V0.1 只允许只读 operation；就绪不等于已完成真实飞书读取验收。</div>
             <div class="panel-status" data-panel-status="diagnostics" role="status" aria-live="polite" hidden></div>
-            <div class="table-wrap" data-panel-content="diagnostics"><table><thead><tr><th>App</th><th>Binding / Agent</th><th>启用</th><th>Profile</th><th>Version</th><th>读写就绪</th><th>错误</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
+            <div class="table-wrap" data-panel-content="diagnostics"><table><thead><tr><th>App</th><th>Binding / Agent</th><th>启用</th><th>Profile</th><th>Version</th><th>只读就绪</th><th>错误</th></tr></thead><tbody id="diagnostics-body"></tbody></table></div>
           </article>
 
           <article data-panel="audit" aria-labelledby="audit-title" hidden>

@@ -32,7 +32,8 @@ test('Admin web exposes the complete Chinese operator workflow', async () => {
   assert.match(html, /id="sso-app-key"/);
   assert.match(html, /id="validate-draft-button"/);
   assert.match(html, /录入或轮换凭据/);
-  assert.match(html, /approval=admin/);
+  assert.match(html, /V0\.1 边界/);
+  assert.match(html, /飞书业务能力严格只读/);
 });
 
 test('Admin web uses the exact schema-v1 empty configuration', async () => {
@@ -67,7 +68,7 @@ test('Admin web calls only implemented workflow routes and sends CSRF on writes'
   assert.match(app, /credentials: 'same-origin'/);
   assert.match(app, /approvals\/\$\{encodeURIComponent\(id\)\}\/\$\{decision\}/);
   assert.match(app, /approvalCallbackConfigured/);
-  assert.match(app, /approvalCallbackReady/);
+  assert.match(app, /V0\.1 严格只读/);
 
   for (const [name, start, end] of [
     ['publish', 'async function publishDraft', 'async function loadRevisions'],

@@ -30,7 +30,7 @@ TypeScript、Node.js ESM、飞书 Node SDK 与 Pi SDK。默认 Node.js 24，最�
 
 ## 飞书操作是否只能读？
 
-默认 examples 只启用有限读取，但平台提供显式 typed write tools 和结构化 lark-cli write operations。普通写入必须经请求者或管理员卡片审批，高风险删除只能由 `ADMIN_OPEN_IDS` 中的管理员批准；未列入 AgentDefinition 的工具不会发布给模型。
+V0.1 对飞书业务数据严格只读。typed Feishu write tool 和非只读 `lark-cli` operation 会在统一配置加载边界被拒绝；`workspace.write` 只作用于受限的本地 Conversation Workspace，不属于飞书业务写。
 
 ## 可以使用 `lark-cli` 和 Skill 吗？
 

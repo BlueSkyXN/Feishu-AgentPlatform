@@ -14,4 +14,4 @@
 - 移除旧版 Code Runner、native sandbox、远程 Sandbox、Shell、PTY、SSH、MicroVM 与相关构建链路。
 - 提供 Node.js 22.19/24 CI、TypeScript 与测试门禁、CodeQL、Dependency Review、容器构建、GHCR、Release 和 Hugging Face Space HTTPS 同步工作流。
 - 提供 Docker、Docker Compose、Kubernetes、systemd、配置示例、运维文档和可复现源码 ZIP 打包脚本。
-- 固定并回读 `brace-expansion@5.0.8`，修复 Pi 0.82.1 shrinkwrap 嵌套依赖的已知 DoS 公告。
+- 升级 Pi SDK 至 `0.84.1`，使用上游修复后的 `undici@8.9.0` 与 `brace-expansion@5.0.9`，并移除修改第三方依赖的临时 `postinstall` 补丁。

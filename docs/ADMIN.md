@@ -257,5 +257,5 @@ App ID、App Secret、Verification Token、Encrypt Key 与 OAuth 加密材料可
 ## 会话、审批与诊断
 
 - Sessions 支持按 App、Agent、Binding 查询；`abort` 只终止当前 Turn，`reset` 串行清理 Pi Session，永久 `delete` 还需要输入完整 `storageId` 二次确认。即使 active 配置已删除所属 Agent，orphan Session 仍可清理；服务端使用受约束的 Session 身份和路径，并要求 workspace/session root 位于 resolved `DATA_ROOT` 内。
-- Approvals 列表包含作用域、参数 hash、TTL 和处理人。管理台只可批准或拒绝 `approval=admin` 的 pending 记录；`approval=requester` 必须由原消息发送者在飞书卡片中处理。
-- `lark-cli` 诊断分别显示 `approvalCallbackConfigured`（静态配置是否启用 HTTP callback）与 `approvalCallbackReady`（对应 App runtime callback 是否真实可用），并显示 App profile、固定版本、初始化状态及 read/write/high-risk operation 数量。配置为 HTTP 不等于运行时就绪；版本不一致或 profile 初始化失败会使对应 Binding 与平台 readiness 失败。
+- Approvals 列表保留历史/未来兼容记录。V0.1 飞书业务能力严格只读，不应产生新的外部写审批。
+- `lark-cli` 诊断显示 App profile、固定版本、初始化状态及 read/write/high-risk operation 数量；V0.1 中 write/high-risk 数量必须为 0。配置为 HTTP 不等于运行时就绪；版本不一致或 profile 初始化失败会使对应 Binding 与平台 readiness 失败。

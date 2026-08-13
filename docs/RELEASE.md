@@ -76,7 +76,7 @@ npm run release:verify -- v<version>
 
 ## 回滚
 
-- HF source lane：在 GitHub Actions `CI/CD` 手动输入上一个已验证 Commit SHA 并设置 `deploy_hf=true`，等待新的 HF repo/runtime SHA 与 HTTP smoke；
+- HF artifact lane：在 GitHub Actions `CI/CD` 手动输入上一个已验证 Commit SHA 并设置 `deploy_hf=true`，等待 artifact manifest、HF repo/runtime SHA 与 HTTP smoke 回读；
 - 其他部署平台：切回上一 Tag 或固定镜像 digest；
 - GHCR：固定上一版本镜像，不依赖 `latest`；
 - 配置：恢复上一版 apps、agents、bindings 与 Prompt；

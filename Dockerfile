@@ -8,7 +8,6 @@ RUN apt-get update \
 FROM dependency-base AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY scripts/patch-pi-brace-expansion.mjs ./scripts/patch-pi-brace-expansion.mjs
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
@@ -17,7 +16,6 @@ RUN npm run build
 FROM dependency-base AS production-dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY scripts/patch-pi-brace-expansion.mjs ./scripts/patch-pi-brace-expansion.mjs
 RUN npm ci --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 

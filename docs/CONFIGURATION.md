@@ -13,7 +13,7 @@
 | `INTERNAL_HTTP_HOST/PORT` | `127.0.0.1/8788` | 管理面；Host 强制 loopback |
 | `ADMIN_TOKEN` | 空 | Internal API Bearer Token 与 Public `/admin` bootstrap 登录；至少 16 字符，生产使用随机 32-byte 以上值 |
 | `ADMIN_OPEN_IDS` | 空 | 逗号分隔的飞书管理员 open_id，仅用于 admin tool approval/SSO allowlist |
-| `TOOL_APPROVAL_TTL_MS` | `300000` | requester/admin 飞书卡片审批有效期 |
+| `TOOL_APPROVAL_TTL_MS` | `300000` | 历史/未来兼容审批记录 TTL；V0.1 不发布外部写能力 |
 | `MODEL_BROKER_ENABLED` | 上游配置完整时自动启用 | Host 模型代理 |
 | `MODEL_BROKER_HOST/PORT` | `127.0.0.1/8790` | 强制 loopback |
 | `MODEL_BROKER_UPSTREAM_BASE_URL` | 自动拼 Cloudflare URL | 可选完整上游根地址，只允许 HTTPS |
@@ -107,22 +107,22 @@ tools:
 
 省略 `workspace.root/sessionRoot` 时分别使用 `<DATA_ROOT>/workspaces` 和 `<DATA_ROOT>/sessions`；显式值经 `resolve` 后必须等于或位于 resolved `DATA_ROOT` 内。公开 examples 有意省略，避免容器把数据错误写到只读 `/app/data`。`maxTotalBytes=268435456` 和 `maxFiles=10000` 是 Workspace 持久总量边界，不等同于单 Turn 附件的 `maxBytesPerItem/maxTotalBytes`。
 
-`workspace.write` 只允许 `workspace.mode=read-write`。`openapi.get` 必须同时配置路径前缀 allowlist。Feishu 写工具必须显式加入 `tools.feishu`，其 grant 不能使用 `approval=never`；高风险删除只能使用 `approval=admin`。
+`workspace.write` 只允许 `workspace.mode=read-write`，它只修改当前 Conversation Workspace，不属于飞书业务写。`openapi.get` 必须同时配置路径前缀 allowlist。V0.1 禁止在 `tools.feishu` 中配置任何写工具。
 
 模型调用参数不包含 `identity`；身份始终由 `tools.grants` 决定。`approval.instance.detail` 与 `approval.instance.create` 是用户身份 API，启用时 grant 必须为 `identity: user`，并为当前消息发送者完成 OAuth。`approval.instance.get` 则是按 `instance_id` 的另一套 SDK endpoint，不要与按 `instance_code` 的 detail 契约混用。
 
 ```yaml
 tools:
-  feishu: [doc.read, doc.create, base.records.delete]
+  feishu: [doc.read, base.records.list]
   grants:
-    - name: doc.create
+    - name: doc.read
       identity: app
-      effect: write
-      approval: requester
-    - name: base.records.delete
+      effect: read
+      approval: never
+    - name: base.records.list
       identity: app
-      effect: high-risk-write
-      approval: admin
+      effect: read
+      approval: never
 ```
 
 `larkcli.run` 优先使用结构化 operations，而不是让模型提交整条命令：
@@ -134,15 +134,16 @@ larkCli:
   expectedVersion: 1.0.79
   timeoutMs: 60000
   operations:
-    - id: create-document
-      command: [docs, +create]
-      effect: write
-      approval: requester
+    - id: calendar-agenda
+      command: [calendar, +agenda]
+      effect: read
+      approval: never
       allowedFlags:
-        --title: {type: string, required: true, maxBytes: 800}
-        --content: {type: content-file, required: true, maxBytes: 2000000}
-      requiredFlags: [--title, --content]
+        --calendar-id: {type: string, maxBytes: 256}
+      requiredFlags: []
 ```
+
+V0.1 的 `larkCli.operations` 只能使用 `effect: read` 和 `approval: never`；命令分类器也必须确认固定 command 为只读。
 
 每个 operation 使用 bot identity；Host 固定 command、管理 `--as/--format` 等参数并校验 flags。`@larksuite/cli@1.0.79` 是精确 production dependency，由 `package-lock.json` 锁定；Docker 从 `/app/node_modules/.bin` 启动，不做 global install，运行诊断仍要求 executable 回读版本精确匹配。省略 `larkCli.root` 时使用 `<DATA_ROOT>/lark-cli`。
 

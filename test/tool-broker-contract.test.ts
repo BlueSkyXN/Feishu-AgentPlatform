@@ -13,6 +13,7 @@ import type {
 import {
   FEISHU_TOOL_NAMES,
   READ_ONLY_FEISHU_TOOL_NAMES,
+  WRITE_FEISHU_TOOL_NAMES,
 } from '../src/config/types.js';
 import { loadAgentDefinition } from '../src/config/load-platform.js';
 import type {
@@ -391,11 +392,8 @@ test('required typed write fields fail before approval or OpenAPI dispatch', asy
   }
 });
 
-test('agent config fails fast unless Approval detail/create grants use user identity', async (t) => {
-  for (const name of [
-    'approval.instance.detail',
-    'approval.instance.create',
-  ] as const) {
+test('agent config fails fast unless Approval detail grants use user identity', async (t) => {
+  for (const name of ['approval.instance.detail'] as const) {
     await t.test(`${name} rejects app identity`, async () => {
       await assert.rejects(
         () => loadAgentDefinition(
@@ -421,6 +419,96 @@ test('agent config fails fast unless Approval detail/create grants use user iden
       );
     });
   }
+});
+
+test('V0.1 configuration rejects every Feishu typed write tool', async (t) => {
+  for (const name of WRITE_FEISHU_TOOL_NAMES) {
+    await t.test(name, async () => {
+      await assert.rejects(
+        () => loadAgentDefinition(
+          `test-${name}.yaml`,
+          resolve(process.cwd()),
+          resolve(process.cwd(), 'data'),
+          agentSource(name, name === 'approval.instance.create' ? 'user' : 'app'),
+        ),
+        /V0\.1 Feishu policy is read-only; write tool/,
+      );
+    });
+  }
+});
+
+test('V0.1 configuration rejects write effects on typed Feishu read tools', async (t) => {
+  for (const grant of [
+    { effect: 'write', approval: 'requester' },
+    { effect: 'high-risk-write', approval: 'admin' },
+  ] as const) {
+    await t.test(grant.effect, async () => {
+      await assert.rejects(
+        () => loadAgentDefinition(
+          `test-doc-read-${grant.effect}.yaml`,
+          resolve(process.cwd()),
+          resolve(process.cwd(), 'data'),
+          {
+            ...baseAgentSource(`contract-doc-read-${grant.effect}`),
+            workspace: { mode: 'none' },
+            tools: {
+              feishu: ['doc.read'],
+              workspace: [],
+              grants: [{
+                name: 'doc.read',
+                identity: 'app',
+                effect: grant.effect,
+                approval: grant.approval,
+              }],
+            },
+            larkCli: { enabled: false },
+          },
+        ),
+        /V0\.1 Feishu policy is read-only; grant "doc\.read" must use effect=read and approval=never/,
+      );
+    });
+  }
+});
+
+test('V0.1 configuration rejects write lark-cli operations but preserves local workspace.write', async () => {
+  await assert.rejects(
+    () => loadAgentDefinition(
+      'test-lark-cli-write.yaml',
+      resolve(process.cwd()),
+      resolve(process.cwd(), 'data'),
+      {
+        ...baseAgentSource('contract-lark-cli-write'),
+        workspace: { mode: 'none' },
+        tools: { feishu: ['larkcli.run'], workspace: [] },
+        larkCli: {
+          enabled: true,
+          operations: [{
+            id: 'create-document',
+            command: ['docs', '+create'],
+            effect: 'write',
+            approval: 'requester',
+          }],
+        },
+      },
+    ),
+    /V0\.1 Feishu policy is read-only; lark-cli operation "create-document"/,
+  );
+
+  const workspaceAgent = await loadAgentDefinition(
+    'test-workspace-write.yaml',
+    resolve(process.cwd()),
+    resolve(process.cwd(), 'data'),
+    {
+      ...baseAgentSource('contract-workspace-write'),
+      workspace: { mode: 'read-write' },
+      tools: { feishu: [], workspace: ['workspace.write'] },
+      larkCli: { enabled: false },
+    },
+  );
+  assert.equal(
+    workspaceAgent?.tools.grants.find((grant) => grant.name === 'workspace.write')?.effect,
+    'write',
+  );
 });
 
 test('typed write grants cannot be downgraded to read or weaker approval', async (t) => {
@@ -463,14 +551,11 @@ test('typed write grants cannot be downgraded to read or weaker approval', async
 });
 
 function agentSource(
-  name: 'approval.instance.detail' | 'approval.instance.create',
+  name: FeishuToolName,
   identity: ToolIdentity,
 ): Record<string, unknown> {
   return {
-    id: `contract-${name.replaceAll('.', '-')}`,
-    systemPromptFile: 'prompts/general.md',
-    provider: 'host-broker',
-    model: 'test-model',
+    ...baseAgentSource(`contract-${name.replaceAll('.', '-')}`),
     workspace: { mode: 'none' },
     tools: {
       feishu: [name],
@@ -479,6 +564,15 @@ function agentSource(
       grants: [{ name, identity }],
     },
     larkCli: { enabled: false },
+  };
+}
+
+function baseAgentSource(id: string): Record<string, unknown> {
+  return {
+    id,
+    systemPromptFile: 'prompts/general.md',
+    provider: 'host-broker',
+    model: 'test-model',
   };
 }
 

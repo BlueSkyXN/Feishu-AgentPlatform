@@ -71,6 +71,15 @@ test('model gateway credential stays in Host model broker', async () => {
   assert.match(sessionCore, /modelBroker\.capability/);
 });
 
+test('Pi SDK sessions disable startup model network and attribution telemetry', async () => {
+  const sessionCore = await source('src/pi/session-core.ts');
+  assert.match(sessionCore, /process\.env\.PI_OFFLINE\s*=\s*['"]1['"]/);
+  assert.match(sessionCore, /process\.env\.PI_TELEMETRY\s*=\s*['"]0['"]/);
+  assert.match(sessionCore, /applyOverrides\(\{\s*enableInstallTelemetry:\s*false\s*\}\)/);
+  assert.match(sessionCore, /allowModelNetwork:\s*false/);
+  assert.match(sessionCore, /refreshOnCreate:\s*false/);
+});
+
 test('HF production image keeps first-run setup mode independent from model credentials', async () => {
   const [dockerfile, hostConfig] = await Promise.all([
     source('Dockerfile'),
@@ -203,17 +212,17 @@ test('artifact packager ships the production runtime with config examples only',
   assert.match(packager, /payload\.tar\.gz/u);
   assert.match(packager, /manifest\.json/u);
   assert.match(packager, /active YAML manifests are forbidden/u);
-  assert.match(packager, /patch-pi-brace-expansion\.mjs/u);
+  assert.doesNotMatch(packager, /patch-pi-brace-expansion\.mjs/u);
 });
 
-test('Pi nested brace-expansion is patched to the audited version', async () => {
+test('Pi dependency tree uses patched upstream releases without a postinstall override', async () => {
   const manifest = JSON.parse(
     await source(
       'node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion/package.json',
     ),
   ) as { version?: string };
-  assert.equal(manifest.version, '5.0.8');
-  assert.match(await source('package.json'), /patch-pi-brace-expansion\.mjs/);
+  assert.equal(manifest.version, '5.0.9');
+  assert.doesNotMatch(await source('package.json'), /patch-pi-brace-expansion\.mjs/);
 });
 
 test('office Skills remain vendored and explicitly selectable', async () => {

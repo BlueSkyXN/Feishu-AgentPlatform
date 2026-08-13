@@ -75,17 +75,6 @@ larkCli:
         --order: { type: string, choices: [asc, desc] }
         --no-reactions: { type: boolean }
       requiredFlags: [--chat-id]
-    - id: create-document
-      command: [docs, +create]
-      effect: write
-      approval: requester
-      allowedFlags:
-        --title: { type: string, required: true, maxBytes: 800 }
-        --content: { type: content-file, required: true, maxBytes: 2000000 }
-        --doc-format: { type: string, choices: [xml, markdown] }
-        --parent-token: { type: string, maxBytes: 256 }
-        --parent-position: { type: string, maxBytes: 256 }
-      requiredFlags: [--title, --content]
   skills:
     - lark-shared
     - lark-im

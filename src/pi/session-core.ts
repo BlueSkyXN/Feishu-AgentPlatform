@@ -26,6 +26,10 @@ export async function createPiSessionCore(
     signal?: AbortSignal,
   ) => Promise<unknown>,
 ): Promise<PiSessionCore> {
+  // Pi gives these environment flags precedence over SettingsManager. Force
+  // process and in-process sessions to share the same offline boundary.
+  process.env.PI_OFFLINE = '1';
+  process.env.PI_TELEMETRY = '0';
   const settingsManager = SettingsManager.create(init.workspace, init.agentDir);
   const resourceLoader = new DefaultResourceLoader({
     cwd: init.workspace,
@@ -42,6 +46,7 @@ export async function createPiSessionCore(
     systemPromptOverride: () => init.systemPrompt,
   });
   await resourceLoader.reload();
+  settingsManager.applyOverrides({ enableInstallTelemetry: false });
 
   const skillErrors = resourceLoader
     .getSkills()
@@ -88,6 +93,8 @@ export async function createPiSessionCore(
   const modelRuntime = await ModelRuntime.create({
     credentials: new InMemoryCredentialStore(),
     modelsPath: null,
+    allowModelNetwork: false,
+    refreshOnCreate: false,
   });
   modelRuntime.registerProvider(init.provider, {
     name: `Host broker for ${init.provider}`,

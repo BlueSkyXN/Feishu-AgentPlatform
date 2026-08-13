@@ -32,10 +32,10 @@ callbacks:
 至少订阅机器人接收消息事件。按绑定到该 App 的所有 Agent 实际启用工具授予最小权限，例如：
 
 - 消息接收、当前聊天历史、群信息和用户基础资料；
-- 文档、Base、日历、任务或审批中被 AgentDefinition 明确启用的读/写权限；
+- 文档、Base、日历、任务或审批中被 AgentDefinition 明确启用的只读权限；
 - Host 回复当前入站消息所需权限。
 
-默认 examples 不启用 typed 写工具。新增写能力必须同时配置最小飞书 scope、tool/operation grant、requester/admin 审批、审计、范围和回滚策略；删除等高风险操作只允许 `ADMIN_OPEN_IDS` 中的管理员批准。需要审批的 App 必须启用 HTTP card callback。
+V0.1 严格只读：typed Feishu write tool 和非只读 `lark-cli` operation 会在服务端配置加载时被拒绝。飞书 App scope 也应只申请已启用读取工具实际需要的最小集合。
 
 ## 发布与验收
 
@@ -46,7 +46,7 @@ callbacks:
 5. 启动后检查 `/readyz`；
 6. 验证私聊、群聊 `@`、默认 Binding、命令 Binding、线程隔离和重复事件；
 7. 分别验证 WS、HTTP challenge、卡片回调和 OAuth（如启用）；
-8. 若启用写操作，验证请求者/admin 批准、拒绝、过期、非授权 operator 和外部系统实际结果；
+8. 验证任何飞书写工具或非只读 CLI operation 都无法发布；
 9. 使用同一 Agent 跨两个 App 时，确认 App 凭据、lark-cli bot profile、会话和 Workspace 不串用；
 10. 用超限 `Content-Length`、缺失/不可信长度及实际流超限三种情况验证附件被提前或流中拒绝，且 Prompt/日志不出现 Host 绝对路径。
 

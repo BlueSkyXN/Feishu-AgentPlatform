@@ -8,6 +8,7 @@ import { loadPlatformConfig } from '../src/config/load-platform.js';
 import {
   DEFAULT_WORKSPACE_MAX_FILES,
   DEFAULT_WORKSPACE_MAX_TOTAL_BYTES,
+  READ_ONLY_FEISHU_TOOL_NAMES,
 } from '../src/config/types.js';
 
 const projectRoot = resolve(process.cwd());
@@ -45,6 +46,11 @@ test('committed examples materialize into a valid single-App multi-Agent deploym
     assert.ok(platform.agents.every((agent) =>
       agent.workspace.maxTotalBytes === DEFAULT_WORKSPACE_MAX_TOTAL_BYTES &&
       agent.workspace.maxFiles === DEFAULT_WORKSPACE_MAX_FILES
+    ));
+    assert.ok(platform.agents.every((agent) =>
+      agent.tools.feishu.every((name) =>
+        (READ_ONLY_FEISHU_TOOL_NAMES as readonly string[]).includes(name)
+      ) && agent.larkCli.operations.every((operation) => operation.effect === 'read')
     ));
     assert.deepEqual(
       platform.bindings.map((binding) => binding.id),

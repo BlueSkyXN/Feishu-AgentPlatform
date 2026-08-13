@@ -63,13 +63,14 @@ test('repository check ignores active manifests covered by .gitignore', async ()
 
 test('release preview is marked, excludes ignored and sensitive paths, and is deterministic', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'release-script-test-'));
-  const uncommitted = join(root, 'release-preview-test.txt');
   try {
     const { packageRelease } = await packageModule();
     const { gitTrackedFiles, isCleanGitTree } = await releaseUtilsModule();
-    if (await isCleanGitTree(root)) {
+    const fixtureRoot = join(temporary, 'repository');
+    await createReleaseFixtureRepository(root, fixtureRoot);
+    if (await isCleanGitTree(fixtureRoot)) {
       const official = await packageRelease({
-        root,
+        root: fixtureRoot,
         outputDir: join(temporary, 'clean-official'),
         mode: 'official',
         sourceDateEpoch: 1_800_000_000,
@@ -77,19 +78,26 @@ test('release preview is marked, excludes ignored and sensitive paths, and is de
       assert.equal(official.mode, 'official');
       assert.equal(official.preview, false);
       const officialEntries = (
-        await commandOutput('unzip', ['-Z', '-1', official.zipPath], root)
+        await commandOutput('unzip', ['-Z', '-1', official.zipPath], fixtureRoot)
       ).split(/\r?\n/u).filter(Boolean);
       const prefix = `${basename(official.zipPath, '.zip')}/`;
       assert.deepEqual(
         officialEntries.map((path) => path.slice(prefix.length)),
-        [...await gitTrackedFiles(root, 'HEAD'), 'RELEASE_MANIFEST.txt'].sort(),
+        [...await gitTrackedFiles(fixtureRoot, 'HEAD'), 'RELEASE_MANIFEST.txt'].sort(),
       );
     }
 
+    const uncommitted = join(fixtureRoot, 'release-preview-test.txt');
     await writeFile(uncommitted, 'uncommitted preview fixture\n', 'utf8');
+    await writeFile(join(fixtureRoot, '.env'), 'SECRET=preview-only\n', 'utf8');
+    for (const path of ['data/runtime.db', 'local/note.txt', 'secrets/token.txt']) {
+      const destination = join(fixtureRoot, path);
+      await mkdir(resolve(destination, '..'), { recursive: true });
+      await writeFile(destination, 'sensitive preview fixture\n', 'utf8');
+    }
     await assert.rejects(
       () => packageRelease({
-        root,
+        root: fixtureRoot,
         outputDir: join(temporary, 'official'),
         mode: 'official',
         sourceDateEpoch: 1_800_000_000,
@@ -98,13 +106,13 @@ test('release preview is marked, excludes ignored and sensitive paths, and is de
     );
 
     const first = await packageRelease({
-      root,
+      root: fixtureRoot,
       outputDir: join(temporary, 'first'),
       mode: 'auto',
       sourceDateEpoch: 1_800_000_000,
     });
     const second = await packageRelease({
-      root,
+      root: fixtureRoot,
       outputDir: join(temporary, 'second'),
       mode: 'preview',
       sourceDateEpoch: 1_800_000_000,
@@ -115,10 +123,11 @@ test('release preview is marked, excludes ignored and sensitive paths, and is de
     assert.equal(first.sha256, second.sha256);
     assert.equal(await sha256(first.zipPath), await sha256(second.zipPath));
 
-    const entries = await commandOutput('unzip', ['-Z', '-1', first.zipPath], root);
+    const entries = await commandOutput('unzip', ['-Z', '-1', first.zipPath], fixtureRoot);
     const paths = entries.split(/\r?\n/u).filter(Boolean);
     assert.ok(paths.some((path) => path.endsWith('/RELEASE_PREVIEW.txt')));
     assert.ok(paths.some((path) => path.endsWith('/release-preview-test.txt')));
+    assert.equal(paths.some((path) => path.includes('/ignored/')), false);
     assert.equal(
       paths.some((path) =>
         /\/(?:local|data|secrets)\//u.test(path) ||
@@ -132,10 +141,34 @@ test('release preview is marked, excludes ignored and sensitive paths, and is de
     const checksum = await readFile(first.checksumPath, 'utf8');
     assert.equal(checksum, `${first.sha256}  ${basename(first.zipPath)}\n`);
   } finally {
-    await rm(uncommitted, { force: true });
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+async function createReleaseFixtureRepository(
+  sourceRoot: string,
+  fixtureRoot: string,
+): Promise<void> {
+  await mkdir(fixtureRoot, { recursive: true });
+  for (const path of [
+    'package.json',
+    'README.md',
+    'scripts/package-release.mjs',
+    'scripts/release-utils.mjs',
+  ]) {
+    const destination = join(fixtureRoot, path);
+    await mkdir(resolve(destination, '..'), { recursive: true });
+    await writeFile(destination, await readFile(join(sourceRoot, path)));
+  }
+  await writeFile(join(fixtureRoot, '.gitignore'), '/ignored/\n', 'utf8');
+  await commandOutput('git', ['init', '-q'], fixtureRoot);
+  await commandOutput('git', ['config', 'user.name', 'Release Test'], fixtureRoot);
+  await commandOutput('git', ['config', 'user.email', 'release-test@example.invalid'], fixtureRoot);
+  await commandOutput('git', ['add', '.'], fixtureRoot);
+  await commandOutput('git', ['commit', '-q', '-m', 'fixture'], fixtureRoot);
+  await mkdir(join(fixtureRoot, 'ignored'), { recursive: true });
+  await writeFile(join(fixtureRoot, 'ignored/runtime.txt'), 'ignored fixture\n', 'utf8');
+}
 
 test('workflows pin Actions and gate release and HF deployment on resolved commit SHAs', async () => {
   const workflowRoot = join(root, '.github', 'workflows');

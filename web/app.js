@@ -990,7 +990,7 @@ async function handleApprovalAction(event) {
   const approving = decision === 'approve';
   const confirmed = await askConfirmation({
     title: `${approving ? '批准' : '拒绝'}管理员审批`,
-    description: `${approval.operation}（${approval.effect}）· ${approval.appKey}/${approval.agentId}。${approving ? '批准后运行时会继续执行待审批操作。' : '拒绝后本次待审批操作不会执行。'}`,
+    description: `${approval.operation}（${approval.effect}）· ${approval.appKey}/${approval.agentId}。这是历史/未来兼容审批；V0.1 不应产生新记录。${approving ? '批准后运行时会继续执行该兼容操作。' : '拒绝后本次操作不会执行。'}`,
     confirmLabel: `确认${approving ? '批准' : '拒绝'}`,
     trigger: button,
     danger: true,
@@ -1027,10 +1027,10 @@ function diagnosticReadiness(item) {
   const root = element('div', { className: 'cell-stack' });
   root.append(badge(item.ready ? '运行时就绪' : '未就绪', item.ready ? '' : 'error'));
   root.append(element('small', {
-    text: `读 ${item.readOperations ?? '—'} · 写 ${item.writeOperations ?? '—'} · 高风险 ${item.highRiskOperations ?? '—'}`,
+    text: `只读 operation ${item.readOperations ?? '—'} · 禁止写 ${item.writeOperations ?? '—'} · 禁止高风险 ${item.highRiskOperations ?? '—'}`,
   }));
   root.append(element('small', {
-    text: `审批回调 ${item.approvalCallbackConfigured ? '已配置 HTTP' : '未配置 HTTP'} · ${item.approvalCallbackReady ? '运行时可用' : '运行时不可用'}`,
+    text: `V0.1 严格只读 · HTTP callback ${item.approvalCallbackConfigured ? '已配置' : '未配置'}`,
   }));
   return root;
 }
@@ -1045,7 +1045,7 @@ async function loadAudit() {
     item.action,
     `${item.entityType}${item.entityId ? ` / ${item.entityId}` : ''}`,
     element('span', { className: 'code-cell', text: JSON.stringify(item.details) }),
-  ]), '暂无审计记录', '管理写操作完成后会在这里留下服务端审计记录。');
+  ]), '暂无审计记录', '配置、凭据、会话等管理操作完成后会在这里留下服务端审计记录。');
 }
 
 async function api(path, options = {}) {

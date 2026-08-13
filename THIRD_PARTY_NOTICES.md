@@ -9,7 +9,7 @@
 - `@earendil-works/pi-coding-agent`、`@earendil-works/pi-ai`：MIT；
 - `@larksuiteoapi/node-sdk`：飞书/Lark Node SDK；
 - `@larksuite/cli`：Docker 镜像中的飞书 CLI；
-- `brace-expansion@5.0.8`：用于覆盖 Pi 0.82.1 `npm-shrinkwrap.json` 内的旧版本；根项目 `postinstall` 会把已审计版本同步到 Pi 嵌套依赖并校验结果；
+- `undici@8.9.0`、`brace-expansion@5.0.9`：由 Pi `0.84.1` 的上游依赖树解析，锁文件固定并由安全门禁回读；
 - Node.js 及其传递依赖：各自许可证见对应发行物。
 
 `vendor/skills/*/SOURCE.json` 记录 vendored Skill 的来源与版本。发布前应结合 `package-lock.json` 生成 SBOM，并复核依赖许可证。

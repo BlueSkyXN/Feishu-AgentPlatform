@@ -47,14 +47,15 @@ Prompt、Skill、聊天、文档、附件和模型输出都不是权限来源。
 - Pi Worker 只接收短期 capability、隔离目录和明确工具描述；
 - Worker 释放时撤销 capability；
 - Prompt、Skill、Workspace、`lark-cli` 参数和工具结果不接收长期凭据。
+- 共享 Pi SDK session core 强制 `PI_OFFLINE=1` 与 `PI_TELEMETRY=0`，process Worker 子进程环境也固定相同值，并关闭 install telemetry/provider attribution 和 create-time model catalog network refresh；业务模型流量只经 Host Model Broker。
 
 ### 飞书与工具
 
-- 默认 examples 只启用读取；显式写工具必须配置 effect/approval；
+- V0.1 配置加载器拒绝 typed Feishu write tool 和非只读 `lark-cli` operation；
 - `openapi.get` 仅允许 GET 与路径前缀 allowlist；
 - lockfile 固定的 `@larksuite/cli@1.0.79` 使用独立 strict bot profile、固定 operation/flags、`shell=false`、最小环境和输出脱敏；
 - 附件下载按 header 提前拒绝并逐 chunk 执行 per-item/remaining-total 硬限制，超限立即销毁 stream，只以安全 Workspace 相对路径落盘；
-- 写操作经 requester/admin 卡片审批，高风险操作只允许 `ADMIN_OPEN_IDS`；
+- dormant 写协议和审批基础设施不构成 V0.1 可发布能力；
 - Host 负责回复当前入站消息，Agent 没有通用跨聊天发送工具。
 
 ### WorkspaceGuard
@@ -70,8 +71,8 @@ Prompt、Skill、聊天、文档、附件和模型输出都不是权限来源。
 - 只有精确 trusted proxy socket peer 才能提供 XFF 第一跳，默认不信任转发头；
 - Internal 管理使用 Bearer Token；
 - Vault 使用 AES-GCM，管理面不回显 Secret，master key 由独立部署 Secret 注入；
-- npm 使用锁文件和 `npm ci`，锁定 `@larksuite/cli` production dependency，并在 `postinstall` 回读 Pi 嵌套安全覆盖；
-- CI/Container/HF/Release 复用 exact-head quality gate，执行仓库策略、文档、类型、测试、构建、镜像 setup smoke、CodeQL 和依赖审查；
+- npm 使用锁文件和 `npm ci`，锁定 Pi 与 `@larksuite/cli` production dependency，并在 CI 执行 production `npm audit`；
+- CI/Container/HF/Release 复用 exact-head quality gate，执行 production dependency audit、仓库策略、文档、类型、测试、构建和镜像 setup smoke；CodeQL、PR Dependency Review 与定时 Dependency Audit 由独立 workflow 执行；
 - 发布归档由 deterministic Node ZIP writer 生成 SHA-256 和逐文件 manifest，已存在 Release 只接受 byte-identical 资产。
 
 ## 不保证与残余风险

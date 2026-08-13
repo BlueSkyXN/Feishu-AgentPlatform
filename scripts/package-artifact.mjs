@@ -21,7 +21,6 @@ export const MANIFEST_FILENAME = 'manifest.json';
 const SOURCE_REPOSITORY = 'https://github.com/BlueSkyXN/Feishu-AgentPlatform.git';
 const PAYLOAD_STATIC_FILES = ['package.json', 'package-lock.json'];
 const PAYLOAD_STATIC_DIRS = ['dist', 'web', 'prompts', 'skills', 'vendor'];
-const PATCH_SCRIPT = 'scripts/patch-pi-brace-expansion.mjs';
 
 export function artifactKey(project, slot, sourceSha, filename) {
   return `${project}/${slot}/${sourceSha}/${filename}`;
@@ -137,7 +136,7 @@ async function main() {
   assertValidSlot(slot);
 
   const sourceRoot = resolve(new URL('..', import.meta.url).pathname);
-  for (const required of [...PAYLOAD_STATIC_FILES, ...PAYLOAD_STATIC_DIRS, PATCH_SCRIPT]) {
+  for (const required of [...PAYLOAD_STATIC_FILES, ...PAYLOAD_STATIC_DIRS]) {
     await stat(resolve(sourceRoot, required)).catch(() => {
       throw new Error(`payload input is missing: ${required} (run npm run build first)`);
     });
@@ -151,8 +150,6 @@ async function main() {
     for (const file of PAYLOAD_STATIC_FILES) {
       await cp(resolve(sourceRoot, file), join(staging, file));
     }
-    await mkdir(join(staging, 'scripts'), { recursive: true });
-    await cp(resolve(sourceRoot, PATCH_SCRIPT), join(staging, 'scripts', 'patch-pi-brace-expansion.mjs'));
     const examples = await copyConfigExamples(sourceRoot, staging);
     await assertNoSymlinks(staging, 'artifact payload');
 

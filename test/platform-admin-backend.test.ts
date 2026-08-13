@@ -238,6 +238,139 @@ test('publish always compare-and-swaps the exact Draft that was validated', asyn
   }
 });
 
+test('Admin validation and publish reject a Draft with Feishu write capability', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'feishu-admin-readonly-policy-'));
+  await mkdir(join(root, 'prompts'), { recursive: true });
+  await writeFile(join(root, 'prompts/general.md'), 'General prompt', 'utf8');
+  const database = new PlatformDatabase(join(root, 'platform.db'));
+  const vault = new CredentialVault(database, 'platform-master-key-for-tests');
+  for (const credential of [
+    { name: 'PRIMARY_APP_ID', kind: 'feishu-app-id', value: 'cli_primary' },
+    { name: 'PRIMARY_APP_SECRET', kind: 'feishu-app-secret', value: 'secret' },
+  ]) vault.setCredential({ ...credential, actor: 'test' });
+  const store = new ConfigDocumentStore<PlatformConfigDocument>(
+    database,
+    validatePlatformConfigDocument,
+  );
+  const active = store.importSeed(document(root), { actor: 'test' });
+  const draftDocument = document(root);
+  draftDocument.agents[0]!.tools.feishu.push('doc.create');
+  draftDocument.agents[0]!.tools.grants.push({
+    name: 'doc.create',
+    identity: 'app',
+    effect: 'write',
+    approval: 'requester',
+  });
+  const draft = store.saveDraft(draftDocument, {
+    actor: 'test',
+    expectedDraftRevisionId: null,
+  });
+  const backend = new PlatformAdminBackend(
+    {
+      snapshot: () => runtimeSnapshot(),
+      listApps: () => [],
+      getApp: () => undefined,
+      applyPlatformConfig: async () => undefined,
+    } as unknown as PlatformHost,
+    hostConfig(root, join(root, 'platform.db')),
+    database,
+    store,
+    vault,
+  );
+  try {
+    assert.deepEqual(await backend.validateDraft(adminContext()), {
+      valid: false,
+      errors: [
+        'platform.db#agents[0]: V0.1 Feishu policy is read-only; write tool "doc.create" is prohibited.',
+      ],
+      warnings: [],
+    });
+    await assert.rejects(
+      () => backend.publishDraft({ expectedDraftRevisionId: draft.id }, adminContext()),
+      (error: unknown) => Boolean(
+        error && typeof error === 'object' &&
+        (error as { status?: number }).status === 400 &&
+        (error as { code?: string }).code === 'config_invalid',
+      ),
+    );
+    assert.equal(store.getState().active?.id, active.id);
+    assert.equal(store.getState().draft?.id, draft.id);
+  } finally {
+    database.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Admin rollback rejects a historical Feishu write revision without changing Active', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'feishu-admin-readonly-rollback-'));
+  await mkdir(join(root, 'prompts'), { recursive: true });
+  await writeFile(join(root, 'prompts/general.md'), 'General prompt', 'utf8');
+  const database = new PlatformDatabase(join(root, 'platform.db'));
+  const vault = new CredentialVault(database, 'platform-master-key-for-tests');
+  for (const credential of [
+    { name: 'PRIMARY_APP_ID', kind: 'feishu-app-id', value: 'cli_primary' },
+    { name: 'PRIMARY_APP_SECRET', kind: 'feishu-app-secret', value: 'secret' },
+  ]) vault.setCredential({ ...credential, actor: 'test' });
+  const store = new ConfigDocumentStore<PlatformConfigDocument>(
+    database,
+    validatePlatformConfigDocument,
+  );
+  const writeDocument = document(root);
+  writeDocument.agents[0]!.tools.feishu.push('doc.create');
+  writeDocument.agents[0]!.tools.grants.push({
+    name: 'doc.create',
+    identity: 'app',
+    effect: 'write',
+    approval: 'requester',
+  });
+  const writeRevision = store.importSeed(writeDocument, { actor: 'test' });
+  const cleanDraft = store.saveDraft(document(root), {
+    actor: 'test',
+    expectedDraftRevisionId: null,
+    sourceRevisionId: writeRevision.id,
+  });
+  const cleanRevision = store.publishDraft({
+    actor: 'test',
+    expectedDraftRevisionId: cleanDraft.id,
+  });
+  const applied: number[] = [];
+  const backend = new PlatformAdminBackend(
+    {
+      snapshot: () => runtimeSnapshot(),
+      listApps: () => [],
+      getApp: () => undefined,
+      applyPlatformConfig: async (_platform: PlatformConfig, revisionId?: number) => {
+        if (revisionId !== undefined) applied.push(revisionId);
+      },
+    } as unknown as PlatformHost,
+    hostConfig(root, join(root, 'platform.db')),
+    database,
+    store,
+    vault,
+  );
+  try {
+    const revisionCount = store.listRevisions().length;
+    await assert.rejects(
+      () => backend.rollbackRevision({ revisionId: writeRevision.id }, adminContext()),
+      (error: unknown) => Boolean(
+        error && typeof error === 'object' &&
+        (error as { status?: number }).status === 400 &&
+        (error as { code?: string }).code === 'config_invalid' &&
+        String((error as { message?: string }).message).includes(
+          'V0.1 Feishu policy is read-only',
+        ),
+      ),
+    );
+    assert.equal(store.getState().active?.id, cleanRevision.id);
+    assert.equal(store.getState().draft, undefined);
+    assert.equal(store.listRevisions().length, revisionCount);
+    assert.deepEqual(applied, []);
+  } finally {
+    database.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('rollback reports and audits runtime apply failure after the Active revision changes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'feishu-admin-rollback-'));
   await mkdir(join(root, 'prompts'), { recursive: true });

@@ -74,7 +74,7 @@ MODEL_PROVIDER_POLICY=host-broker-only
 - executable 在 Host 可执行；
 - 固定 command、requiredFlags、allowedFlags、effect 和 approval 正确；
 - bot profile 能在 `<DATA_ROOT>/lark-cli/<appKey>` 初始化，且持久卷可写；
-- 写操作的 HTTP card callbacks、requester/admin operator 和 `ADMIN_OPEN_IDS` 已配置；
+- V0.1 配置中不存在 typed Feishu write tool 或非只读 `lark-cli` operation；
 - 固定 CLI 版本的实际命令、scope 和输出 shape 已在真实飞书身份下验收。
 
 ## Workspace 文件无法读取或写入

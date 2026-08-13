@@ -43,6 +43,10 @@ test('Pi SDK accepts the Host broker provider without shared credential files', 
     skillPaths: [],
     tools: [],
   };
+  const previousPiOffline = process.env.PI_OFFLINE;
+  const previousPiTelemetry = process.env.PI_TELEMETRY;
+  process.env.PI_OFFLINE = '0';
+  process.env.PI_TELEMETRY = '1';
 
   try {
     const core = await createPiSessionCore(init, async () => {
@@ -50,10 +54,15 @@ test('Pi SDK accepts the Host broker provider without shared credential files', 
     });
     assert.equal(core.session.model?.provider, 'host-broker');
     assert.equal(core.session.model?.id, 'integration-model');
+    assert.equal(core.session.settingsManager.getEnableInstallTelemetry(), false);
+    assert.equal(process.env.PI_OFFLINE, '1');
+    assert.equal(process.env.PI_TELEMETRY, '0');
     await core.session.dispose();
     await assert.rejects(access(join(agentDir, 'auth.json')));
     await assert.rejects(access(join(agentDir, 'models.json')));
   } finally {
+    restoreEnvironmentVariable('PI_OFFLINE', previousPiOffline);
+    restoreEnvironmentVariable('PI_TELEMETRY', previousPiTelemetry);
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -129,4 +138,9 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<voi
     if (Date.now() >= deadline) throw new Error('Timed out waiting for Pi worker exit.');
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
+}
+
+function restoreEnvironmentVariable(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
 }

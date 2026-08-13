@@ -4,13 +4,17 @@ import { parse } from 'yaml';
 
 import { normalizeOpenApiPath } from '../feishu/openapi-policy.js';
 import { assertAssignableHttpPath, normalizeHttpPath } from '../http/path-policy.js';
-import { classifyLarkCliCommandEffect } from '../tools/lark-cli.js';
+import {
+  assertReadOnlyLarkCommand,
+  classifyLarkCliCommandEffect,
+} from '../tools/lark-cli.js';
 import {
   DEFAULT_WORKSPACE_MAX_FILES,
   DEFAULT_WORKSPACE_MAX_TOTAL_BYTES,
   FEISHU_TOOL_NAMES,
   READ_ONLY_FEISHU_TOOL_NAMES,
   THINKING_LEVELS,
+  WRITE_FEISHU_TOOL_NAMES,
   WORKSPACE_TOOL_NAMES,
   type AgentDefinitionManifest,
   type AppAgentBindingManifest,
@@ -507,7 +511,23 @@ export async function loadAgentDefinition(
     workspaceTools,
     defaultIdentity,
   );
-  validateUserOnlyApprovalGrants(toolGrants, configFile);
+  const writeTool = feishuTools.find((name) =>
+    (WRITE_FEISHU_TOOL_NAMES as readonly string[]).includes(name)
+  );
+  if (writeTool) {
+    throw new Error(
+      `${configFile}: V0.1 Feishu policy is read-only; write tool "${writeTool}" is prohibited.`,
+    );
+  }
+  validateUserOnlyReadGrants(toolGrants, configFile);
+  for (const grant of toolGrants) {
+    if (!(FEISHU_TOOL_NAMES as readonly string[]).includes(grant.name)) continue;
+    if (grant.effect !== 'read' || grant.approval !== 'never') {
+      throw new Error(
+        `${configFile}: V0.1 Feishu policy is read-only; grant "${grant.name}" must use effect=read and approval=never.`,
+      );
+    }
+  }
 
   if (larkCli.allowedCommands !== undefined) {
     throw new Error(
@@ -518,6 +538,14 @@ export async function loadAgentDefinition(
     larkCli.operations,
     `${configFile}: larkCli.operations`,
   );
+  for (const operation of operations) {
+    if (operation.effect !== 'read') {
+      throw new Error(
+        `${configFile}: V0.1 Feishu policy is read-only; lark-cli operation "${operation.id}" cannot use effect=${operation.effect}.`,
+      );
+    }
+    assertReadOnlyLarkCommand(operation.command.join(' '));
+  }
   const skills = stringArray(larkCli.skills, `${configFile}: larkCli.skills`);
   for (const skill of skills) {
     if (!SKILL_PATTERN.test(skill)) {
@@ -1275,20 +1303,17 @@ function validateToolGrantFloor(
   }
 }
 
-function validateUserOnlyApprovalGrants(
+function validateUserOnlyReadGrants(
   grants: readonly ToolGrant[],
   configFile: string,
 ): void {
-  for (const name of [
-    'approval.instance.detail',
-    'approval.instance.create',
-  ] as const) {
-    const grant = grants.find((candidate) => candidate.name === name);
-    if (grant && grant.identity !== 'user') {
-      throw new Error(
-        `${configFile}: ${name} requires identity=user in tools.grants.`,
-      );
-    }
+  const approvalDetail = grants.find(
+    (candidate) => candidate.name === 'approval.instance.detail',
+  );
+  if (approvalDetail && approvalDetail.identity !== 'user') {
+    throw new Error(
+      `${configFile}: approval.instance.detail requires identity=user in tools.grants.`,
+    );
   }
 }
 

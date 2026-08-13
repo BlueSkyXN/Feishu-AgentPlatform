@@ -62,7 +62,7 @@ curl -sS \
 - Session、Workspace 总字节/文件数和附件目录容量；
 - 附件 Content-Length 提前拒绝、流中超限、stream destroy 与每 Turn remaining-total 耗尽；
 - SQLite 主库/WAL 容量、active/draft revision、审计增长和 Vault 解密失败；
-- 待审批数量、超时/拒绝、非授权 operator 点击和管理登录 rate limit；反向代理场景还应区分 trusted peer 命中与共享 proxy peer 限流。
+- 历史审批记录与异常出现的新 pending 外部写审批（V0.1 应告警），以及管理登录 rate limit；反向代理场景还应区分 trusted peer 命中与共享 proxy peer 限流。
 
 ## 日志
 

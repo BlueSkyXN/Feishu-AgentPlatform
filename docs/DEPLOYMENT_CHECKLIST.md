@@ -28,7 +28,7 @@
 - [ ] App 为企业自建应用且机器人能力已开启；
 - [ ] 事件 transport 与 `FeishuApp` 一致；
 - [ ] HTTP URL、Verification Token 和可选 Encrypt Key 正确；
-- [ ] 权限只覆盖绑定 Agent 实际使用的工具；写工具有 requester/admin 审批，高风险删除仅 admin；
+- [ ] 权限只覆盖绑定 Agent 实际使用的读取工具；typed Feishu write tool 和非只读 CLI operation 均被配置校验拒绝；
 - [ ] App 已发布并进入测试范围；
 - [ ] mention、DM、群聊和附件策略已验证；附件覆盖 Content-Length 超限、无/不可信长度、流中超限、per-item/remaining-total 和安全相对落盘路径。
 
@@ -60,7 +60,7 @@
 - [ ] `INTERNAL_HTTP_HOST=127.0.0.1`；
 - [ ] `ADMIN_TOKEN` 为随机 Secret；
 - [ ] TLS 代理 peer 使用精确 `ADMIN_TRUSTED_PROXY_ADDRESSES`；代理覆盖而不是追加外部 XFF，不同真实客户端不会共享或伪造限流 key；
-- [ ] `ADMIN_OPEN_IDS`、approval TTL 与审批人范围已复核；
+- [ ] `ADMIN_OPEN_IDS` 仅按实际 Admin SSO/兼容用途配置，不作为 V0.1 外部写授权；
 - [ ] 运维脚本不打印 Token；
 - [ ] abort、reset、policy 操作可追溯；
 - [ ] 关键错误率、队列、Session、租约、Model Broker 和磁盘有告警。
@@ -70,7 +70,7 @@
 - [ ] WS 消息和 HTTP event/callback 闭环；
 - [ ] default、命令与 allowlist Binding 路由；
 - [ ] 多 App 复用同一 Agent 且上下文不串用；
-- [ ] 用户资料、当前聊天历史、读取工具和明确启用的写操作审批；
+- [ ] 用户资料、当前聊天历史、读取工具，以及写能力无法发布的负向校验；
 - [ ] Cloudflare 流式模型调用；
 - [ ] `platformctl config backup` 与 `config restore <file> --confirm=RESTORE` 已演练；恢复后回读数据库并确认旧库保留为 `pre-restore-*`；
 - [ ] SQLite、Vault key、Session、OAuth、附件、Workspace、lark-cli profile、重启恢复和 revision/镜像回滚分别验收。

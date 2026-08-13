@@ -1,6 +1,6 @@
 # 贡献指南
 
-本仓库接收 Feishu App 接入、Agent 能力、Binding 路由、会话运行时、受控工具、WorkspaceGuard 和运维改进。涉及飞书写权限、审批策略、跨会话读取、模型凭据下放或任意命令执行的变更，必须单独说明威胁场景、默认值和回滚方式。
+本仓库接收 Feishu App 接入、Agent 能力、Binding 路由、会话运行时、受控工具、WorkspaceGuard 和运维改进。V0.1 严格只读；任何恢复飞书写权限的提案，以及跨会话读取、模型凭据下放或任意命令执行的变更，都必须作为新的产品与安全决策单独评审。
 
 ## 开发环境
 
@@ -31,7 +31,7 @@ npm run platformctl -- validate
 3. `AppAgentBinding` 是 App 与 Agent 的唯一关联边；路由必须确定且可审计，禁止依赖文件顺序或随机选择。
 4. `ConversationSession` 必须按 `appKey + agentId + tenantKey + chatId + topicKey` 隔离。
 5. Pi Worker 只能使用 Host Model Broker 的短期 capability，不得接收 Cloudflare、飞书、OAuth 或管理凭据。
-6. 新增飞书能力优先实现 typed tool；外部写操作必须声明 effect/approval，高风险删除只允许 admin。`lark-cli` 使用固定 operation/flags，不接受任意 argv。
+6. 新增飞书能力优先实现 typed read tool；V0.1 不接受外部写操作。`lark-cli` 使用固定只读 operation/flags，不接受任意 argv。
 7. Workspace 访问必须经过 WorkspaceGuard；不得增加 Shell、PTY、命令执行或把外部文件系统挂入会话目录。
 
 ## 提交前检查

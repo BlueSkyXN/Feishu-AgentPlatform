@@ -10,7 +10,7 @@ pinned: false
 # Feishu Agent Platform 0.1.0
 
 [![CI/CD](https://github.com/BlueSkyXN/Feishu-AgentPlatform/actions/workflows/ci.yml/badge.svg)](https://github.com/BlueSkyXN/Feishu-AgentPlatform/actions/workflows/ci.yml)
-[![Hugging Face Space](https://img.shields.io/badge/Hugging%20Face-Space-FFD21E)](https://huggingface.co/spaces/BlueSkyXN/Feishu-AgentPlatform)
+[![Hugging Face Space](https://img.shields.io/badge/Hugging%20Face-Space-FFD21E)](https://huggingface.co/spaces/BlueSkyXN/feishu-agent-platform-hfs)
 
 Feishu Agent Platform 是一个由 Pi SDK 驱动的飞书多 Agent 运行平台。它把飞书应用、Agent 能力和两者的绑定关系拆开管理，支持：
 
@@ -70,7 +70,7 @@ V1 会话键不自动迁移；本仓库是新平台首次正式落地，直接�
 - Pi Worker 只持有 Host Model Broker 签发、可撤销的内存 capability。
 - `lark-cli` 由 Pi 通过 typed tool 发起，但只在可信 Host 执行；Host 注入当前 App 身份。
 - `@larksuite/cli@1.0.79` 是由 `package-lock.json` 固定的 production dependency；Host 从本项目 `node_modules/.bin` 启动它并初始化独立 bot profile，每个 operation 固定命令、参数 schema、effect 和 approval，使用 `shell: false`、当前聊天边界、超时、输出上限和脱敏。
-- typed tool 和 `lark-cli` 读取操作无需审批；普通写操作由请求者通过飞书卡片一次性批准，高风险操作只允许 `ADMIN_OPEN_IDS` 中的管理员通过飞书卡片或认证管理台批准。
+- V0.1 对飞书业务数据严格只读；配置中的 typed Feishu write tool 或非只读 `lark-cli` operation 会在 YAML、Admin Validate/Publish/Rollback、`platformctl config import --publish` 和启动加载时被服务端拒绝。普通 `config import` 可保存尚未通过语义校验的中间 Draft，但后续 Validate/Publish 必须通过同一门禁。`workspace.write` 仅是受路径与配额约束的本地 Conversation Workspace 能力，不属于飞书外部写。
 - Admin 登录只有在 socket peer 精确匹配 `ADMIN_TRUSTED_PROXY_ADDRESSES` 时才读取 `X-Forwarded-For` 第一跳；该变量为空时不信任任何代理，不能用通配地址换取表面上的客户端 IP。
 - 配置 revision、审计和加密 Vault 位于 `/data/feishu-agent-platform/platform.db`；`PLATFORM_MASTER_KEY` 不写入数据库、日志或 Worker。
 - Sandbox 只有 `WorkspaceGuard`：`none`、`read-only`、`read-write`。
@@ -167,6 +167,6 @@ npm run hf:preflight
 
 ## 当前验证边界
 
-正式交付以 GitHub Actions `CI/CD` 为准：同一个 immutable Commit 先通过 source matrix 和 production image smoke，再自动部署 HF Space并等待 repo/runtime SHA、`RUNNING`、域名 `READY`、`/healthz`、`/readyz` 和 `/admin` 回读。开发机输出和本地 ZIP 不构成交付证据。真实飞书 App、Cloudflare AI Gateway、WS/HTTP/审批卡片、OAuth、SQLite/Vault 重启恢复和长期压力运行仍属于目标环境验收。
+正式交付以 GitHub Actions `CI/CD` 为准：同一个 immutable Commit 先通过 source matrix 和 production image smoke，再自动部署 HF Space并等待 repo/runtime SHA、`RUNNING`、域名 `READY`、`/healthz`、`/readyz` 和 `/admin` 回读。开发机输出和本地 ZIP 不构成交付证据。真实飞书 App、Cloudflare AI Gateway、WS/HTTP、OAuth、SQLite/Vault 重启恢复和长期压力运行仍属于目标环境验收。
 
 许可证：仓库整体按根目录 [GPL-3.0](LICENSE) 分发；迁入的旧 MIT 底座保留在 [LICENSES/feishu-pi-agent-host-MIT.txt](LICENSES/feishu-pi-agent-host-MIT.txt)。

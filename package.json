@@ -17,13 +17,13 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "postinstall": "node scripts/patch-pi-brace-expansion.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "node -e \"require('node:fs').rmSync('.test-dist',{recursive:true,force:true})\"",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
-    "check": "npm run security:scan && npm run repository:check && npm run docs:check && npm run typecheck && npm test",
+    "check": "npm run security:audit && npm run security:scan && npm run repository:check && npm run docs:check && npm run typecheck && npm test",
     "platformctl": "tsx src/cli/platformctl.ts",
     "security:scan": "node scripts/security-scan.mjs",
+    "security:audit": "npm audit --omit=dev --audit-level=moderate",
     "docs:check": "node scripts/check-docs.mjs",
     "repository:check": "node scripts/check-repository.mjs",
     "hf:preflight": "node scripts/hf-space-preflight.mjs",
@@ -32,20 +32,16 @@
     "ci": "npm run check && npm run build"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.82.1",
-    "@earendil-works/pi-coding-agent": "0.82.1",
+    "@earendil-works/pi-ai": "0.84.1",
+    "@earendil-works/pi-coding-agent": "0.84.1",
     "@larksuite/cli": "1.0.79",
     "@larksuiteoapi/node-sdk": "1.71.1",
-    "brace-expansion": "5.0.8",
-    "typebox": "1.1.38",
+    "typebox": "1.3.7",
     "yaml": "2.9.0"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
     "tsx": "4.20.6",
     "typescript": "5.9.3"
-  },
-  "overrides": {
-    "brace-expansion": "$brace-expansion"
   }
 }
